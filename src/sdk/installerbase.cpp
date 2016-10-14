@@ -111,9 +111,7 @@ int InstallerBase::run()
 
     setLoggingFilterRule(parser);
 
-    qCDebug(QInstaller::lcTranslations) << "Language:" << QLocale().uiLanguages()
-        .value(0, QLatin1String("No UI language set")).toUtf8().constData();
-    qDebug().noquote() << "Arguments:" << arguments().join(QLatin1String(", "));
+    dumpLanguageAndArguments();
 
     SDKApp::registerMetaResources(manager.collectionByName("QResources"));
 
@@ -349,5 +347,12 @@ QString InstallerBase::readControlScript(const CommandLineParser &parser)
             + m_core->settings().controlScript();
     }
     return controlScript;
+}
+
+void InstallerBase::dumpLanguageAndArguments() const
+{
+    qCDebug(QInstaller::lcTranslations) << "Language:" << QLocale().uiLanguages()
+        .value(0, QLatin1String("No UI language set")).toUtf8().constData();
+    qDebug().noquote() << "Arguments:" << arguments().join(QLatin1String(", "));
 }
 

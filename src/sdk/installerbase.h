@@ -60,6 +60,7 @@ private:
     void setLoggingFilterRule(const CommandLineParser &parser);
     static QInstaller::PackageManagerCore *createPackageManagerCore(const QList<QInstaller::OperationBlob> &oldOperations, const CommandLineParser &parser, qint64 magicMarker);
     QString readControlScript(const CommandLineParser &parser);
+    void dumpLanguageAndArguments() const;
 
 private:
     QInstaller::PackageManagerCore *m_core;
