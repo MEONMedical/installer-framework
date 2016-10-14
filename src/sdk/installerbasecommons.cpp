@@ -40,19 +40,32 @@
 
 using namespace QInstaller;
 
-
-// -- InstallerGui
-
-InstallerGui::InstallerGui(PackageManagerCore *core)
-    : PackageManagerGui(core, 0)
+void addProductKeyCheckPagesIfAny(PackageManagerGui *manager, PackageManagerCore *core)
 {
     ProductKeyCheck *checker = ProductKeyCheck::instance();
     foreach (const int id, checker->registeredPages()) {
         PackageManagerPage *page = PackageManagerPageFactory::instance().create(id, core);
         Q_ASSERT_X(page, Q_FUNC_INFO, qPrintable(QString::fromLatin1("Page with %1 couldn't be "
             "constructed.").arg(id)));
-        setPage(id, page);
+        manager->setPage(id, page);
     }
+}
+
+void addPagesToControlAndComponentScriptEngines(PackageManagerGui *manager, PackageManagerCore *core)
+{
+    foreach (const int id, manager->pageIds()) {
+        QWizardPage *wizardPage = manager->page(id);
+        core->controlScriptEngine()->addToGlobalObject(wizardPage);
+        core->componentScriptEngine()->addToGlobalObject(wizardPage);
+    }
+}
+
+// -- InstallerGui
+
+InstallerGui::InstallerGui(PackageManagerCore *core)
+    : PackageManagerGui(core, 0)
+{
+    addProductKeyCheckPagesIfAny(this, core);
 
     setPage(PackageManagerCore::Introduction, new IntroductionPage(core));
     setPage(PackageManagerCore::TargetDirectory, new TargetDirectoryPage(core));
@@ -65,11 +78,7 @@ InstallerGui::InstallerGui(PackageManagerCore *core)
     setPage(PackageManagerCore::PerformInstallation, new PerformInstallationPage(core));
     setPage(PackageManagerCore::InstallationFinished, new FinishedPage(core));
 
-    foreach (const int id, pageIds()) {
-        QWizardPage *wizardPage = page(id);
-        packageManagerCore()->controlScriptEngine()->addToGlobalObject(wizardPage);
-        packageManagerCore()->componentScriptEngine()->addToGlobalObject(wizardPage);
-    }
+    addPagesToControlAndComponentScriptEngines(this, core);
 }
 
 
@@ -78,13 +87,7 @@ InstallerGui::InstallerGui(PackageManagerCore *core)
 MaintenanceGui::MaintenanceGui(PackageManagerCore *core)
     : PackageManagerGui(core, 0)
 {
-    ProductKeyCheck *checker = ProductKeyCheck::instance();
-    foreach (const int id, checker->registeredPages()) {
-        PackageManagerPage *page = PackageManagerPageFactory::instance().create(id, core);
-        Q_ASSERT_X(page, Q_FUNC_INFO, qPrintable(QString::fromLatin1("Page with %1 couldn't be "
-            "constructed.").arg(id)));
-        setPage(id, page);
-    }
+    addProductKeyCheckPagesIfAny(this, core);
 
     IntroductionPage *intro = new IntroductionPage(core);
     connect(intro, &IntroductionPage::packageManagerCoreTypeChanged,
@@ -110,11 +113,7 @@ MaintenanceGui::MaintenanceGui(PackageManagerCore *core)
     if (core->isUninstaller())
         wizardPageVisibilityChangeRequested(false, PackageManagerCore::InstallationFinished + 1);
 
-    foreach (const int id, pageIds()) {
-        QWizardPage *wizardPage = page(id);
-        packageManagerCore()->controlScriptEngine()->addToGlobalObject(wizardPage);
-        packageManagerCore()->componentScriptEngine()->addToGlobalObject(wizardPage);
-    }
+    addPagesToControlAndComponentScriptEngines(this, core);
 }
 
 void MaintenanceGui::updateRestartPage()
