@@ -65,6 +65,7 @@ private:
     void applyCommandLineOptions(const CommandLineParser &parser);
     QHash<QString, QString> readAndSetCommandLineVariables(const CommandLineParser &parser);
     void installTranslators() const;
+    int runInstance();
 
 private:
     QInstaller::PackageManagerCore *m_core;

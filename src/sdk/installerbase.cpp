@@ -144,11 +144,17 @@ int InstallerBase::run()
         connect(m_core, &QInstaller::PackageManagerCore::valueChanged, &controller,
             &TabController::updateManagerParams);
     }
+
     QInstaller::PackageManagerCore::Status status =
         QInstaller::PackageManagerCore::Status(controller.init());
     if (status != QInstaller::PackageManagerCore::Success)
         return status;
 
+    return runInstance();
+}
+
+int InstallerBase::runInstance()
+{
     const int result = QCoreApplication::instance()->exec();
     if (result != 0)
         return result;
@@ -156,7 +162,7 @@ int InstallerBase::run()
     if (m_core->finishedWithSuccess())
         return QInstaller::PackageManagerCore::Success;
 
-    status = m_core->status();
+    int status = m_core->status();
     switch (status) {
         case QInstaller::PackageManagerCore::Success:
             return status;
