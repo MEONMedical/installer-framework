@@ -40,7 +40,7 @@
 
 using namespace QInstaller;
 
-void addProductKeyCheckPagesIfAny(PackageManagerGui *manager, PackageManagerCore *core)
+static void addProductKeyCheckPagesIfAny(PackageManagerGui *manager, PackageManagerCore *core)
 {
     ProductKeyCheck *checker = ProductKeyCheck::instance();
     foreach (const int id, checker->registeredPages()) {
@@ -51,7 +51,7 @@ void addProductKeyCheckPagesIfAny(PackageManagerGui *manager, PackageManagerCore
     }
 }
 
-void addPagesToControlAndComponentScriptEngines(PackageManagerGui *manager, PackageManagerCore *core)
+static void addPagesToControlAndComponentScriptEngines(PackageManagerGui *manager, PackageManagerCore *core)
 {
     foreach (const int id, manager->pageIds()) {
         QWizardPage *wizardPage = manager->page(id);
