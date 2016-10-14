@@ -36,6 +36,8 @@
 
 #include "sdkapp.h"
 
+class CommandLineParser;
+
 namespace QInstaller {
     class PackageManagerCore;
 }
@@ -55,6 +57,7 @@ private:
     void dumpResourceTree() const;
     QStringList repositories(const QString &list) const;
     bool isAnotherInstanceRunning() const;
+    void setLoggingFilterRule(const CommandLineParser &parser);
 
 private:
     QInstaller::PackageManagerCore *m_core;

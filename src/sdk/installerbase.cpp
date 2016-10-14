@@ -109,16 +109,7 @@ int InstallerBase::run()
     CommandLineParser parser;
     parser.parse(arguments());
 
-    QString loggingRules(QLatin1String("ifw.* = false")); // disable all by default
-    if (QInstaller::isVerbose()) {
-        loggingRules = QString(); // enable all in verbose mode
-        if (parser.isSet(QLatin1String(CommandLineOptions::LoggingRules))) {
-            loggingRules = parser.value(QLatin1String(CommandLineOptions::LoggingRules))
-                           .split(QLatin1Char(','), QString::SkipEmptyParts)
-                           .join(QLatin1Char('\n')); // take rules from command line
-        }
-    }
-    QLoggingCategory::setFilterRules(loggingRules);
+    setLoggingFilterRule(parser);
 
     qCDebug(QInstaller::lcTranslations) << "Language:" << QLocale().uiLanguages()
         .value(0, QLatin1String("No UI language set")).toUtf8().constData();
@@ -333,3 +324,16 @@ bool InstallerBase::isAnotherInstanceRunning() const
     return false;
 }
 
+void InstallerBase::setLoggingFilterRule(const CommandLineParser &parser)
+{
+    QString loggingRules(QLatin1String("ifw.* = false")); // disable all by default
+    if (QInstaller::isVerbose()) {
+        loggingRules = QString(); // enable all in verbose mode
+        if (parser.isSet(QLatin1String(CommandLineOptions::LoggingRules))) {
+            loggingRules = parser.value(QLatin1String(CommandLineOptions::LoggingRules))
+                           .split(QLatin1Char(','), QString::SkipEmptyParts)
+                           .join(QLatin1Char('\n')); // take rules from command line
+        }
+    }
+    QLoggingCategory::setFilterRules(loggingRules);
+}
