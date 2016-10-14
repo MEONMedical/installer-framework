@@ -127,35 +127,7 @@ int InstallerBase::run()
 
     QHash<QString, QString> params = readAndSetCommandLineVariables(parser);
 
-    const QString directory = QLatin1String(":/translations");
-    const QStringList translations = m_core->settings().translations();
-
-    if (translations.isEmpty()) {
-        foreach (const QLocale locale, QLocale().uiLanguages()) {
-            QScopedPointer<QTranslator> qtTranslator(new QTranslator(QCoreApplication::instance()));
-            const bool qtLoaded = qtTranslator->load(locale, QLatin1String("qt"),
-                                              QLatin1String("_"), directory);
-
-            if (qtLoaded || locale.language() == QLocale::English) {
-                if (qtLoaded)
-                    QCoreApplication::instance()->installTranslator(qtTranslator.take());
-
-                QScopedPointer<QTranslator> ifwTranslator(new QTranslator(QCoreApplication::instance()));
-                if (ifwTranslator->load(locale, QString(), QString(), directory))
-                    QCoreApplication::instance()->installTranslator(ifwTranslator.take());
-
-                // To stop loading other translations it's sufficient that
-                // qt was loaded successfully or we hit English as system language
-                break;
-            }
-        }
-    } else {
-        foreach (const QString &translation, translations) {
-            QScopedPointer<QTranslator> translator(new QTranslator(QCoreApplication::instance()));
-            if (translator->load(translation, QLatin1String(":/translations")))
-                QCoreApplication::instance()->installTranslator(translator.take());
-        }
-    }
+    installTranslators();
 
     //create the wizard GUI
     TabController controller(0);
@@ -369,4 +341,37 @@ QHash<QString, QString> InstallerBase::readAndSetCommandLineVariables(const Comm
     }
 
     return params;
+}
+
+void InstallerBase::installTranslators() const
+{
+    const QString directory = QLatin1String(":/translations");
+    const QStringList translations = m_core->settings().translations();
+
+    if (translations.isEmpty()) {
+        foreach (const QLocale locale, QLocale().uiLanguages()) {
+            QScopedPointer<QTranslator> qtTranslator(new QTranslator(QCoreApplication::instance()));
+            const bool qtLoaded = qtTranslator->load(locale, QLatin1String("qt"),
+                                              QLatin1String("_"), directory);
+
+            if (qtLoaded || locale.language() == QLocale::English) {
+                if (qtLoaded)
+                    QCoreApplication::instance()->installTranslator(qtTranslator.take());
+
+                QScopedPointer<QTranslator> ifwTranslator(new QTranslator(QCoreApplication::instance()));
+                if (ifwTranslator->load(locale, QString(), QString(), directory))
+                    QCoreApplication::instance()->installTranslator(ifwTranslator.take());
+
+                // To stop loading other translations it's sufficient that
+                // qt was loaded successfully or we hit English as system language
+                break;
+            }
+        }
+    } else {
+        foreach (const QString &translation, translations) {
+            QScopedPointer<QTranslator> translator(new QTranslator(QCoreApplication::instance()));
+            if (translator->load(translation, QLatin1String(":/translations")))
+                QCoreApplication::instance()->installTranslator(translator.take());
+        }
+    }
 }

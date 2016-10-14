@@ -64,6 +64,7 @@ private:
     void addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager);
     void applyCommandLineOptions(const CommandLineParser &parser);
     QHash<QString, QString> readAndSetCommandLineVariables(const CommandLineParser &parser);
+    void installTranslators() const;
 
 private:
     QInstaller::PackageManagerCore *m_core;
