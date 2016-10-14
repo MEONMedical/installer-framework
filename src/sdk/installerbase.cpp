@@ -117,12 +117,7 @@ int InstallerBase::run()
 
     m_core = createPackageManagerCore(oldOperations, parser, magicMarker);
 
-    {
-        using namespace QInstaller;
-        ProductKeyCheck::instance()->init(m_core);
-        ProductKeyCheck::instance()->addPackagesFromXml(QLatin1String(":/metadata/Updates.xml"));
-        BinaryFormatEngineHandler::instance()->registerResources(manager.collections());
-    }
+    addProductKeyCheckPackagesAndRegisterResourceCollections(manager);
 
     dumpResourceTree();
 
@@ -356,3 +351,10 @@ void InstallerBase::dumpLanguageAndArguments() const
     qDebug().noquote() << "Arguments:" << arguments().join(QLatin1String(", "));
 }
 
+void InstallerBase::addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager)
+{
+    using namespace QInstaller;
+    ProductKeyCheck::instance()->init(m_core);
+    ProductKeyCheck::instance()->addPackagesFromXml(QLatin1String(":/metadata/Updates.xml"));
+    BinaryFormatEngineHandler::instance()->registerResources(manager.collections());
+}

@@ -61,6 +61,7 @@ private:
     static QInstaller::PackageManagerCore *createPackageManagerCore(const QList<QInstaller::OperationBlob> &oldOperations, const CommandLineParser &parser, qint64 magicMarker);
     QString readControlScript(const CommandLineParser &parser);
     void dumpLanguageAndArguments() const;
+    void addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager);
 
 private:
     QInstaller::PackageManagerCore *m_core;
