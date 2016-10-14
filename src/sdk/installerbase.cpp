@@ -131,22 +131,8 @@ int InstallerBase::run()
 
     //create the wizard GUI
     TabController controller(0);
-    controller.setManager(m_core);
-    controller.setManagerParams(params);
-    controller.setControlScript(controlScript);
 
-    if (m_core->isInstaller()) {
-        controller.setGui(new InstallerGui(m_core));
-    }
-    else {
-        controller.setGui(new MaintenanceGui(m_core));
-        //Start listening to setValue changes that newly installed components might have
-        connect(m_core, &QInstaller::PackageManagerCore::valueChanged, &controller,
-            &TabController::updateManagerParams);
-    }
-
-    QInstaller::PackageManagerCore::Status status =
-        QInstaller::PackageManagerCore::Status(controller.init());
+    int status = setupTabControler(controller, controlScript, params);
     if (status != QInstaller::PackageManagerCore::Success)
         return status;
 
@@ -380,4 +366,22 @@ void InstallerBase::installTranslators() const
                 QCoreApplication::instance()->installTranslator(translator.take());
         }
     }
+}
+
+int InstallerBase::setupTabControler(TabController &controller, const QString &controlScript, const QHash<QString, QString> &params)
+{
+    controller.setManager(m_core);
+    controller.setManagerParams(params);
+    controller.setControlScript(controlScript);
+
+    if (m_core->isInstaller()) {
+        controller.setGui(new InstallerGui(m_core));
+    }
+    else {
+        controller.setGui(new MaintenanceGui(m_core));
+        //Start listening to setValue changes that newly installed components might have
+        connect(m_core, &QInstaller::PackageManagerCore::valueChanged, &controller,
+            &TabController::updateManagerParams);
+    }
+    return controller.init();
 }

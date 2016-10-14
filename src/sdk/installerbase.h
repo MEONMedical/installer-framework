@@ -37,6 +37,7 @@
 #include "sdkapp.h"
 
 class CommandLineParser;
+class TabController;
 
 namespace QInstaller {
     class PackageManagerCore;
@@ -66,6 +67,7 @@ private:
     QHash<QString, QString> readAndSetCommandLineVariables(const CommandLineParser &parser);
     void installTranslators() const;
     int runInstance();
+    int setupTabControler(TabController &controller, const QString &controlScript, const QHash<QString, QString> &params);
 
 private:
     QInstaller::PackageManagerCore *m_core;
