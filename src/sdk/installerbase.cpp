@@ -116,18 +116,8 @@ int InstallerBase::run()
     qDebug().noquote() << "Arguments:" << arguments().join(QLatin1String(", "));
 
     SDKApp::registerMetaResources(manager.collectionByName("QResources"));
-    if (parser.isSet(QLatin1String(CommandLineOptions::StartClient))) {
-        const QStringList arguments = parser.value(QLatin1String(CommandLineOptions::StartClient))
-            .split(QLatin1Char(','), QString::SkipEmptyParts);
-        m_core = new QInstaller::PackageManagerCore(
-            magicMarker, oldOperations,
-            arguments.value(0, QLatin1String(QInstaller::Protocol::DefaultSocket)),
-            arguments.value(1, QLatin1String(QInstaller::Protocol::DefaultAuthorizationKey)),
-            QInstaller::Protocol::Mode::Debug);
-    } else {
-        m_core = new QInstaller::PackageManagerCore(magicMarker, oldOperations,
-            QUuid::createUuid().toString(), QUuid::createUuid().toString());
-    }
+
+    m_core = createPackageManagerCore(oldOperations, parser, magicMarker);
 
     {
         using namespace QInstaller;
@@ -336,4 +326,20 @@ void InstallerBase::setLoggingFilterRule(const CommandLineParser &parser)
         }
     }
     QLoggingCategory::setFilterRules(loggingRules);
+}
+
+QInstaller::PackageManagerCore *InstallerBase::createPackageManagerCore(const QList<QInstaller::OperationBlob> &oldOperations, const CommandLineParser &parser, qint64 magicMarker)
+{
+    if (parser.isSet(QLatin1String(CommandLineOptions::StartClient))) {
+        const QStringList arguments = parser.value(QLatin1String(CommandLineOptions::StartClient))
+            .split(QLatin1Char(','), QString::SkipEmptyParts);
+        return new QInstaller::PackageManagerCore(
+            magicMarker, oldOperations,
+            arguments.value(0, QLatin1String(QInstaller::Protocol::DefaultSocket)),
+            arguments.value(1, QLatin1String(QInstaller::Protocol::DefaultAuthorizationKey)),
+            QInstaller::Protocol::Mode::Debug);
+    } else {
+        return new QInstaller::PackageManagerCore(magicMarker, oldOperations,
+            QUuid::createUuid().toString(), QUuid::createUuid().toString());
+    }
 }
