@@ -62,6 +62,7 @@ private:
     QString readControlScript(const CommandLineParser &parser);
     void dumpLanguageAndArguments() const;
     void addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager);
+    void applyCommandLineOptions(const CommandLineParser &parser);
 
 private:
     QInstaller::PackageManagerCore *m_core;

@@ -123,59 +123,7 @@ int InstallerBase::run()
 
     QString controlScript = readControlScript(parser);
 
-    if (parser.isSet(QLatin1String(CommandLineOptions::Proxy))) {
-        m_core->settings().setProxyType(QInstaller::Settings::SystemProxy);
-        KDUpdater::FileDownloaderFactory::instance().setProxyFactory(m_core->proxyFactory());
-    }
-
-    if (parser.isSet(QLatin1String(CommandLineOptions::ShowVirtualComponents))) {
-        QFont f;
-        f.setItalic(true);
-        QInstaller::PackageManagerCore::setVirtualComponentsFont(f);
-        QInstaller::PackageManagerCore::setVirtualComponentsVisible(true);
-    }
-
-    if (parser.isSet(QLatin1String(CommandLineOptions::Updater))) {
-        if (m_core->isInstaller())
-            throw QInstaller::Error(QLatin1String("Cannot start installer binary as updater."));
-        m_core->setUpdater();
-    }
-
-    if (parser.isSet(QLatin1String(CommandLineOptions::ManagePackages))) {
-        if (m_core->isInstaller())
-            throw QInstaller::Error(QLatin1String("Cannot start installer binary as package manager."));
-        m_core->setPackageManager();
-    }
-
-    if (parser.isSet(QLatin1String(CommandLineOptions::AddRepository))) {
-        const QStringList repoList = repositories(parser
-            .value(QLatin1String(CommandLineOptions::AddRepository)));
-        if (repoList.isEmpty())
-            throw QInstaller::Error(QLatin1String("Empty repository list for option 'addRepository'."));
-        m_core->addUserRepositories(repoList);
-    }
-
-    if (parser.isSet(QLatin1String(CommandLineOptions::AddTmpRepository))) {
-        const QStringList repoList = repositories(parser
-            .value(QLatin1String(CommandLineOptions::AddTmpRepository)));
-        if (repoList.isEmpty())
-            throw QInstaller::Error(QLatin1String("Empty repository list for option 'addTempRepository'."));
-        m_core->setTemporaryRepositories(repoList, false);
-    }
-
-    if (parser.isSet(QLatin1String(CommandLineOptions::SetTmpRepository))) {
-        const QStringList repoList = repositories(parser
-            .value(QLatin1String(CommandLineOptions::SetTmpRepository)));
-        if (repoList.isEmpty())
-            throw QInstaller::Error(QLatin1String("Empty repository list for option 'setTempRepository'."));
-        m_core->setTemporaryRepositories(repoList, true);
-    }
-
-    QInstaller::PackageManagerCore::setNoForceInstallation(parser
-        .isSet(QLatin1String(CommandLineOptions::NoForceInstallation)));
-    QInstaller::PackageManagerCore::setCreateLocalRepositoryFromBinary(parser
-        .isSet(QLatin1String(CommandLineOptions::CreateLocalRepository))
-        || m_core->settings().createLocalRepository());
+    applyCommandLineOptions(parser);
 
     QHash<QString, QString> params;
     const QStringList positionalArguments = parser.positionalArguments();
@@ -357,4 +305,61 @@ void InstallerBase::addProductKeyCheckPackagesAndRegisterResourceCollections(con
     ProductKeyCheck::instance()->init(m_core);
     ProductKeyCheck::instance()->addPackagesFromXml(QLatin1String(":/metadata/Updates.xml"));
     BinaryFormatEngineHandler::instance()->registerResources(manager.collections());
+}
+
+void InstallerBase::applyCommandLineOptions(const CommandLineParser &parser)
+{
+    if (parser.isSet(QLatin1String(CommandLineOptions::Proxy))) {
+        m_core->settings().setProxyType(QInstaller::Settings::SystemProxy);
+        KDUpdater::FileDownloaderFactory::instance().setProxyFactory(m_core->proxyFactory());
+    }
+
+    if (parser.isSet(QLatin1String(CommandLineOptions::ShowVirtualComponents))) {
+        QFont f;
+        f.setItalic(true);
+        QInstaller::PackageManagerCore::setVirtualComponentsFont(f);
+        QInstaller::PackageManagerCore::setVirtualComponentsVisible(true);
+    }
+
+    if (parser.isSet(QLatin1String(CommandLineOptions::Updater))) {
+        if (m_core->isInstaller())
+            throw QInstaller::Error(QLatin1String("Cannot start installer binary as updater."));
+        m_core->setUpdater();
+    }
+
+    if (parser.isSet(QLatin1String(CommandLineOptions::ManagePackages))) {
+        if (m_core->isInstaller())
+            throw QInstaller::Error(QLatin1String("Cannot start installer binary as package manager."));
+        m_core->setPackageManager();
+    }
+
+    if (parser.isSet(QLatin1String(CommandLineOptions::AddRepository))) {
+        const QStringList repoList = repositories(parser
+            .value(QLatin1String(CommandLineOptions::AddRepository)));
+        if (repoList.isEmpty())
+            throw QInstaller::Error(QLatin1String("Empty repository list for option 'addRepository'."));
+        m_core->addUserRepositories(repoList);
+    }
+
+    if (parser.isSet(QLatin1String(CommandLineOptions::AddTmpRepository))) {
+        const QStringList repoList = repositories(parser
+            .value(QLatin1String(CommandLineOptions::AddTmpRepository)));
+        if (repoList.isEmpty())
+            throw QInstaller::Error(QLatin1String("Empty repository list for option 'addTempRepository'."));
+        m_core->setTemporaryRepositories(repoList, false);
+    }
+
+    if (parser.isSet(QLatin1String(CommandLineOptions::SetTmpRepository))) {
+        const QStringList repoList = repositories(parser
+            .value(QLatin1String(CommandLineOptions::SetTmpRepository)));
+        if (repoList.isEmpty())
+            throw QInstaller::Error(QLatin1String("Empty repository list for option 'setTempRepository'."));
+        m_core->setTemporaryRepositories(repoList, true);
+    }
+
+    QInstaller::PackageManagerCore::setNoForceInstallation(parser
+        .isSet(QLatin1String(CommandLineOptions::NoForceInstallation)));
+    QInstaller::PackageManagerCore::setCreateLocalRepositoryFromBinary(parser
+        .isSet(QLatin1String(CommandLineOptions::CreateLocalRepository))
+        || m_core->settings().createLocalRepository());
 }
