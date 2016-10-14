@@ -36,6 +36,8 @@
 
 #include "sdkapp.h"
 
+#include <QScopedPointer>
+
 class CommandLineParser;
 class TabController;
 
@@ -71,7 +73,7 @@ private:
     QFile *readResourcesAndOldOperationsFromDatOrExecutableFile(QInstaller::ResourceCollectionManager &manager, QList<QInstaller::OperationBlob> &oldOperations, qint64 &magicMarker);
 
 private:
-    QInstaller::PackageManagerCore *m_core;
+    QScopedPointer<QInstaller::PackageManagerCore> m_core;
 };
 
 #endif // INSTALLERBASE_H

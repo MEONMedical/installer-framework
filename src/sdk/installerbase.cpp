@@ -64,14 +64,12 @@
 
 InstallerBase::InstallerBase(int &argc, char *argv[])
     : SDKApp<QApplication>(argc, argv)
-    , m_core(0)
 {
     QInstaller::init(); // register custom operations
 }
 
 InstallerBase::~InstallerBase()
 {
-    delete m_core;
 }
 
 int InstallerBase::run()
@@ -101,7 +99,7 @@ int InstallerBase::run()
 
     SDKApp::registerMetaResources(manager.collectionByName("QResources"));
 
-    m_core = createPackageManagerCore(oldOperations, parser, magicMarker);
+    m_core.reset(createPackageManagerCore(oldOperations, parser, magicMarker));
 
     addProductKeyCheckPackagesAndRegisterResourceCollections(manager);
 
@@ -243,7 +241,7 @@ void InstallerBase::dumpLanguageAndArguments() const
 void InstallerBase::addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager)
 {
     using namespace QInstaller;
-    ProductKeyCheck::instance()->init(m_core);
+    ProductKeyCheck::instance()->init(m_core.data());
     ProductKeyCheck::instance()->addPackagesFromXml(QLatin1String(":/metadata/Updates.xml"));
     BinaryFormatEngineHandler::instance()->registerResources(manager.collections());
 }
@@ -356,17 +354,17 @@ void InstallerBase::installTranslators() const
 
 int InstallerBase::setupTabControler(TabController &controller, const QString &controlScript, const QHash<QString, QString> &params)
 {
-    controller.setManager(m_core);
+    controller.setManager(m_core.data());
     controller.setManagerParams(params);
     controller.setControlScript(controlScript);
 
     if (m_core->isInstaller()) {
-        controller.setGui(new InstallerGui(m_core));
+        controller.setGui(new InstallerGui(m_core.data()));
     }
     else {
-        controller.setGui(new MaintenanceGui(m_core));
+        controller.setGui(new MaintenanceGui(m_core.data()));
         //Start listening to setValue changes that newly installed components might have
-        connect(m_core, &QInstaller::PackageManagerCore::valueChanged, &controller,
+        connect(m_core.data(), &QInstaller::PackageManagerCore::valueChanged, &controller,
             &TabController::updateManagerParams);
     }
     return controller.init();
