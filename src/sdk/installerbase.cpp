@@ -128,15 +128,7 @@ int InstallerBase::run()
 
     dumpResourceTree();
 
-    QString controlScript;
-    if (parser.isSet(QLatin1String(CommandLineOptions::Script))) {
-        controlScript = parser.value(QLatin1String(CommandLineOptions::Script));
-        if (!QFileInfo(controlScript).exists())
-            throw QInstaller::Error(QLatin1String("Script file does not exist."));
-    } else if (!m_core->settings().controlScript().isEmpty()) {
-        controlScript = QLatin1String(":/metadata/installer-config/")
-            + m_core->settings().controlScript();
-    }
+    QString controlScript = readControlScript(parser);
 
     if (parser.isSet(QLatin1String(CommandLineOptions::Proxy))) {
         m_core->settings().setProxyType(QInstaller::Settings::SystemProxy);
@@ -343,3 +335,19 @@ QInstaller::PackageManagerCore *InstallerBase::createPackageManagerCore(const QL
             QUuid::createUuid().toString(), QUuid::createUuid().toString());
     }
 }
+
+QString InstallerBase::readControlScript(const CommandLineParser &parser)
+{
+    QString controlScript;
+
+    if (parser.isSet(QLatin1String(CommandLineOptions::Script))) {
+        controlScript = parser.value(QLatin1String(CommandLineOptions::Script));
+        if (!QFileInfo(controlScript).exists())
+            throw QInstaller::Error(QLatin1String("Script file does not exist."));
+    } else if (!m_core->settings().controlScript().isEmpty()) {
+        controlScript = QLatin1String(":/metadata/installer-config/")
+            + m_core->settings().controlScript();
+    }
+    return controlScript;
+}
+
