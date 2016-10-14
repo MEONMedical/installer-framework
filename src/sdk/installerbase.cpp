@@ -76,23 +76,13 @@ InstallerBase::~InstallerBase()
 
 int InstallerBase::run()
 {
-    RunOnceChecker runCheck(QDir::tempPath()
-                            + QLatin1Char('/')
-                            + qApp->applicationName()
-                            + QLatin1String("1234865.lock"));
-    if (runCheck.isRunning(RunOnceChecker::ConditionFlag::Lockfile)) {
-        // It is possible that two installers with the same name get executed
-        // concurrently and thus try to access the same lock file. This causes
-        // a warning to be shown (when verbose output is enabled) but let's
-        // just silently ignore the fact that we could not create the lock file
-        // and check the running processes.
-        if (runCheck.isRunning(RunOnceChecker::ConditionFlag::ProcessList)) {
-            QInstaller::MessageBoxHandler::information(0, QLatin1String("AlreadyRunning"),
-                tr("Waiting for %1").arg(qAppName()),
-                tr("Another %1 instance is already running. Wait "
-                "until it finishes, close it, or restart your system.").arg(qAppName()));
-            return EXIT_FAILURE;
-        }
+    if (isAnotherInstanceRunning())
+    {
+        QInstaller::MessageBoxHandler::information(0, QLatin1String("AlreadyRunning"),
+            tr("Waiting for %1").arg(qAppName()),
+            tr("Another %1 instance is already running. Wait "
+            "until it finishes, close it, or restart your system.").arg(qAppName()));
+        return EXIT_FAILURE;
     }
 
     QString fileName = datFile(binaryFile());
@@ -108,8 +98,7 @@ int InstallerBase::run()
     qint64 magicMarker;
     QInstaller::ResourceCollectionManager manager;
     QList<QInstaller::OperationBlob> oldOperations;
-    QInstaller::BinaryContent::readBinaryContent(&binary, &oldOperations, &manager, &magicMarker,
-        cookie);
+    QInstaller::BinaryContent::readBinaryContent(&binary, &oldOperations, &manager, &magicMarker, cookie);
 
     // Usually resources simply get mapped into memory and therefore the file does not need to be
     // kept open during application runtime. Though in case of offline installers we need to access
@@ -326,3 +315,21 @@ QStringList InstallerBase::repositories(const QString &list) const
         qDebug().noquote() << "Adding custom repository:" << item;
     return items;
 }
+
+bool InstallerBase::isAnotherInstanceRunning() const
+{
+    RunOnceChecker runCheck(QDir::tempPath()
+                            + QLatin1Char('/')
+                            + qApp->applicationName()
+                            + QLatin1String("1234865.lock"));
+    if (runCheck.isRunning(RunOnceChecker::ConditionFlag::Lockfile)) {
+        // It is possible that two installers with the same name get executed
+        // concurrently and thus try to access the same lock file. This causes
+        // a warning to be shown (when verbose output is enabled) but let's
+        // just silently ignore the fact that we could not create the lock file
+        // and check the running processes.
+        return runCheck.isRunning(RunOnceChecker::ConditionFlag::ProcessList);
+    }
+    return false;
+}
+

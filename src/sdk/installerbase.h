@@ -54,6 +54,7 @@ public:
 private:
     void dumpResourceTree() const;
     QStringList repositories(const QString &list) const;
+    bool isAnotherInstanceRunning() const;
 
 private:
     QInstaller::PackageManagerCore *m_core;
