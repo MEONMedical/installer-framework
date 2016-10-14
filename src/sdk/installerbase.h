@@ -58,7 +58,7 @@ private:
     QStringList repositories(const QString &list) const;
     bool isAnotherInstanceRunning() const;
     void setLoggingFilterRule(const CommandLineParser &parser);
-    QInstaller::PackageManagerCore *createPackageManagerCore(const QList<QInstaller::OperationBlob> &oldOperations, const CommandLineParser &parser, qint64 magicMarker);
+    static QInstaller::PackageManagerCore *createPackageManagerCore(const QList<QInstaller::OperationBlob> &oldOperations, const CommandLineParser &parser, qint64 magicMarker);
 
 private:
     QInstaller::PackageManagerCore *m_core;
