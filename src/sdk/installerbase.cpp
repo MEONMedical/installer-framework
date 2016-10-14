@@ -125,16 +125,7 @@ int InstallerBase::run()
 
     applyCommandLineOptions(parser);
 
-    QHash<QString, QString> params;
-    const QStringList positionalArguments = parser.positionalArguments();
-    foreach (const QString &argument, positionalArguments) {
-        if (argument.contains(QLatin1Char('='))) {
-            const QString name = argument.section(QLatin1Char('='), 0, 0);
-            const QString value = argument.section(QLatin1Char('='), 1, 1);
-            params.insert(name, value);
-            m_core->setValue(name, value);
-        }
-    }
+    QHash<QString, QString> params = readAndSetCommandLineVariables(parser);
 
     const QString directory = QLatin1String(":/translations");
     const QStringList translations = m_core->settings().translations();
@@ -362,4 +353,20 @@ void InstallerBase::applyCommandLineOptions(const CommandLineParser &parser)
     QInstaller::PackageManagerCore::setCreateLocalRepositoryFromBinary(parser
         .isSet(QLatin1String(CommandLineOptions::CreateLocalRepository))
         || m_core->settings().createLocalRepository());
+}
+
+QHash<QString, QString> InstallerBase::readAndSetCommandLineVariables(const CommandLineParser &parser)
+{
+    QHash<QString, QString> params;
+    const QStringList positionalArguments = parser.positionalArguments();
+    foreach (const QString &argument, positionalArguments) {
+        if (argument.contains(QLatin1Char('='))) {
+            const QString name = argument.section(QLatin1Char('='), 0, 0);
+            const QString value = argument.section(QLatin1Char('='), 1, 1);
+            params.insert(name, value);
+            m_core->setValue(name, value);
+        }
+    }
+
+    return params;
 }

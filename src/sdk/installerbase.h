@@ -63,6 +63,7 @@ private:
     void dumpLanguageAndArguments() const;
     void addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager);
     void applyCommandLineOptions(const CommandLineParser &parser);
+    QHash<QString, QString> readAndSetCommandLineVariables(const CommandLineParser &parser);
 
 private:
     QInstaller::PackageManagerCore *m_core;
