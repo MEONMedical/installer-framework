@@ -36,6 +36,7 @@
 #include "installerbase.h"
 #include "installerbasecommons.h"
 #include "tabcontroller.h"
+#include "common.h"
 
 #include <binaryformatenginehandler.h>
 #include <copydirectoryoperation.h>
@@ -74,7 +75,7 @@ InstallerBase::~InstallerBase()
 
 int InstallerBase::run()
 {
-    if (isAnotherInstanceRunning())
+    if (SdkCommon::isAnotherInstanceRunning(qApp->applicationName(), QLatin1String("1234865")))
     {
         QInstaller::MessageBoxHandler::information(0, QLatin1String("AlreadyRunning"),
             tr("Waiting for %1").arg(qAppName()),
@@ -167,23 +168,6 @@ QStringList InstallerBase::repositories(const QString &list) const
     foreach (const QString &item, items)
         qDebug().noquote() << "Adding custom repository:" << item;
     return items;
-}
-
-bool InstallerBase::isAnotherInstanceRunning() const
-{
-    RunOnceChecker runCheck(QDir::tempPath()
-                            + QLatin1Char('/')
-                            + qApp->applicationName()
-                            + QLatin1String("1234865.lock"));
-    if (runCheck.isRunning(RunOnceChecker::ConditionFlag::Lockfile)) {
-        // It is possible that two installers with the same name get executed
-        // concurrently and thus try to access the same lock file. This causes
-        // a warning to be shown (when verbose output is enabled) but let's
-        // just silently ignore the fact that we could not create the lock file
-        // and check the running processes.
-        return runCheck.isRunning(RunOnceChecker::ConditionFlag::ProcessList);
-    }
-    return false;
 }
 
 void InstallerBase::setLoggingFilterRule(const CommandLineParser &parser)

@@ -122,7 +122,8 @@ HEADERS += \
            updatechecker.h \
            installerbase.h \
            constants.h \
-           commandlineparser.h
+           commandlineparser.h \
+           common.h
 
 SOURCES = \
           main.cpp \
@@ -131,7 +132,8 @@ SOURCES = \
           installerbasecommons.cpp \
           settingsdialog.cpp \
           updatechecker.cpp \
-          commandlineparser.cpp
+          commandlineparser.cpp \
+          common.cpp
 
 win32 {
     # Use our own manifest file

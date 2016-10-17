@@ -59,7 +59,6 @@ public:
 private:
     void dumpResourceTree() const;
     QStringList repositories(const QString &list) const;
-    bool isAnotherInstanceRunning() const;
     void setLoggingFilterRule(const CommandLineParser &parser);
     static QInstaller::PackageManagerCore *createPackageManagerCore(const QList<QInstaller::OperationBlob> &oldOperations, const CommandLineParser &parser, qint64 magicMarker);
     QString readControlScript(const CommandLineParser &parser);
