@@ -32,6 +32,7 @@
 **************************************************************************/
 
 #include "updatechecker.h"
+#include "common.h"
 
 #include <binaryformatenginehandler.h>
 #include <component.h>
@@ -54,18 +55,8 @@ UpdateChecker::UpdateChecker(int &argc, char *argv[])
 
 int UpdateChecker::check()
 {
-    RunOnceChecker runCheck(QDir::tempPath()
-                            + QLatin1Char('/')
-                            + qApp->applicationName()
-                            + QLatin1String("15021976.lock"));
-    if (runCheck.isRunning(RunOnceChecker::ConditionFlag::Lockfile)) {
-        // It is possible to install an application and thus the maintenance tool into a
-        // directory that requires elevated permission to create a lock file. Since this
-        // cannot be done without requesting credentials from the user, we silently ignore
-        // the fact that we could not create the lock file and check the running processes.
-        if (runCheck.isRunning(RunOnceChecker::ConditionFlag::ProcessList))
-            throw QInstaller::Error(QLatin1String("An instance is already checking for updates."));
-    }
+    if (SdkCommon::isAnotherInstanceRunning(qApp->applicationName(), QLatin1String("15021976")))
+        throw QInstaller::Error(QLatin1String("An instance is already checking for updates."));
 
     QString fileName = datFile(binaryFile());
     quint64 cookie = QInstaller::BinaryContent::MagicCookieDat;
