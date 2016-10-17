@@ -69,7 +69,6 @@ private:
     void installTranslators() const;
     int runInstance();
     int setupTabControler(TabController &controller, const QString &controlScript, const QHash<QString, QString> &params);
-    QFile *readResourcesAndOldOperationsFromDatOrExecutableFile(QInstaller::ResourceCollectionManager &manager, QList<QInstaller::OperationBlob> &oldOperations, qint64 &magicMarker);
 
 private:
     QScopedPointer<QInstaller::PackageManagerCore> m_core;

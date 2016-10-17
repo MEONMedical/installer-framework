@@ -358,29 +358,3 @@ int InstallerBase::setupTabControler(TabController &controller, const QString &c
     }
     return controller.init();
 }
-
-QFile *InstallerBase::readResourcesAndOldOperationsFromDatOrExecutableFile(QInstaller::ResourceCollectionManager &manager, QList<QInstaller::OperationBlob> &oldOperations, qint64 &magicMarker)
-{
-    QString fileName = datFile(binaryFile());
-    quint64 cookie = QInstaller::BinaryContent::MagicCookieDat;
-    if (fileName.isEmpty()) {
-        fileName = binaryFile();
-        cookie = QInstaller::BinaryContent::MagicCookie;
-    }
-
-    QScopedPointer<QFile> binary(new QFile(fileName));
-    QInstaller::openForRead(binary.data());
-
-    QInstaller::BinaryContent::readBinaryContent(binary.data(), &oldOperations, &manager, &magicMarker, cookie);
-
-    // Usually resources simply get mapped into memory and therefore the file does not need to be
-    // kept open during application runtime. Though in case of offline installers we need to access
-    // the appended binary content (packages etc.), so we close only in maintenance mode.
-    if (magicMarker != QInstaller::BinaryContent::MagicInstallerMarker)
-    {
-        binary->close();
-        return nullptr;
-    }
-
-    return binary.take();
-}
