@@ -88,8 +88,8 @@ int InstallerBase::run()
     QList<QInstaller::OperationBlob> oldOperations;
     qint64 magicMarker=0;
 
-    QFile *file = readResourcesAndOperationsFromDatOrExecutableFile(manager, oldOperations, magicMarker);
-    delete file;
+    // is this really necessary to keep the file open in non installer mode, where is the reference to it?
+    QScopedPointer<QFile> binary(readResourcesAndOperationsFromDatOrExecutableFile(manager, oldOperations, magicMarker));
 
     CommandLineParser parser;
     parser.parse(arguments());
