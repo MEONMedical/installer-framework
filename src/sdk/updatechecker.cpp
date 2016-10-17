@@ -58,21 +58,12 @@ int UpdateChecker::check()
     if (SdkCommon::isAnotherInstanceRunning(qApp->applicationName(), QLatin1String("15021976")))
         throw QInstaller::Error(QLatin1String("An instance is already checking for updates."));
 
-    QString fileName = datFile(binaryFile());
-    quint64 cookie = QInstaller::BinaryContent::MagicCookieDat;
-    if (fileName.isEmpty()) {
-        fileName = binaryFile();
-        cookie = QInstaller::BinaryContent::MagicCookie;
-    }
-
-    QFile binary(fileName);
-    QInstaller::openForRead(&binary);
-
-    qint64 magicMarker;
-    QList<QInstaller::OperationBlob> operations;
     QInstaller::ResourceCollectionManager manager;
-    QInstaller::BinaryContent::readBinaryContent(&binary, &operations, &manager, &magicMarker,
-        cookie);
+    QList<QInstaller::OperationBlob> operations;
+    qint64 magicMarker=0;
+
+    // is this really necessary to keep the file open in non installer mode, where is the reference to it?
+    QScopedPointer<QFile> binary(readResourcesAndOldOperationsFromDatOrExecutableFile(manager, operations, magicMarker));
 
     if (magicMarker == QInstaller::BinaryContent::MagicInstallerMarker)
         throw QInstaller::Error(QLatin1String("Installers cannot check for updates."));
