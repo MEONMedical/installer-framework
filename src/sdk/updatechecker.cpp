@@ -72,12 +72,8 @@ int UpdateChecker::check()
 
     QInstaller::PackageManagerCore core(QInstaller::BinaryContent::MagicUpdaterMarker, operations);
     QInstaller::PackageManagerCore::setVirtualComponentsVisible(true);
-    {
-        using namespace QInstaller;
-        ProductKeyCheck::instance()->init(&core);
-        ProductKeyCheck::instance()->addPackagesFromXml(QLatin1String(":/metadata/Updates.xml"));
-        BinaryFormatEngineHandler::instance()->registerResources(manager.collections());
-    }
+    SdkCommon::addProductKeyCheckPackagesAndRegisterResourceCollections(&core, manager);
+
     if (!core.fetchRemotePackagesTree())
         throw QInstaller::Error(core.error());
 
