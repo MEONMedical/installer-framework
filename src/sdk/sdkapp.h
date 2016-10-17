@@ -143,7 +143,7 @@ public:
     }
 
 
-    QFile *readResourcesAndOldOperationsFromDatOrExecutableFile(QInstaller::ResourceCollectionManager &manager, QList<QInstaller::OperationBlob> &oldOperations, qint64 &magicMarker) const
+    QFile *readResourcesAndOperationsFromDatOrExecutableFile(QInstaller::ResourceCollectionManager &manager, QList<QInstaller::OperationBlob> &oldOperations, qint64 &magicMarker) const
     {
         QString fileName = datFile(binaryFile());
         quint64 cookie = QInstaller::BinaryContent::MagicCookieDat;

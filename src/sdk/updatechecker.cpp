@@ -63,7 +63,7 @@ int UpdateChecker::check()
     qint64 magicMarker=0;
 
     // is this really necessary to keep the file open in non installer mode, where is the reference to it?
-    QScopedPointer<QFile> binary(readResourcesAndOldOperationsFromDatOrExecutableFile(manager, operations, magicMarker));
+    QScopedPointer<QFile> binary(readResourcesAndOperationsFromDatOrExecutableFile(manager, operations, magicMarker));
 
     if (magicMarker == QInstaller::BinaryContent::MagicInstallerMarker)
         throw QInstaller::Error(QLatin1String("Installers cannot check for updates."));

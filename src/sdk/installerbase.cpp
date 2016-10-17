@@ -88,7 +88,7 @@ int InstallerBase::run()
     QList<QInstaller::OperationBlob> oldOperations;
     qint64 magicMarker=0;
 
-    QFile *file = readResourcesAndOldOperationsFromDatOrExecutableFile(manager, oldOperations, magicMarker);
+    QFile *file = readResourcesAndOperationsFromDatOrExecutableFile(manager, oldOperations, magicMarker);
     delete file;
 
     CommandLineParser parser;
