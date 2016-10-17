@@ -1,5 +1,8 @@
 #include "common.h"
 #include "runoncechecker.h"
+#include "binaryformat.h"
+#include "productkeycheck.h"
+#include "binaryformatenginehandler.h"
 
 #include <QString>
 #include <QDir>
@@ -23,6 +26,14 @@ bool isAnotherInstanceRunning(const QString &applicationName, const QString &loc
         return runCheck.isRunning(RunOnceChecker::ConditionFlag::ProcessList);
     }
     return false;
+}
+
+void addProductKeyCheckPackagesAndRegisterResourceCollections(QInstaller::PackageManagerCore *core, const QInstaller::ResourceCollectionManager &manager)
+{
+    using namespace QInstaller;
+    ProductKeyCheck::instance()->init(core);
+    ProductKeyCheck::instance()->addPackagesFromXml(QLatin1String(":/metadata/Updates.xml"));
+    BinaryFormatEngineHandler::instance()->registerResources(manager.collections());
 }
 
 }

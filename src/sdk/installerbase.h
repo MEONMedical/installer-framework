@@ -63,7 +63,6 @@ private:
     static QInstaller::PackageManagerCore *createPackageManagerCore(const QList<QInstaller::OperationBlob> &oldOperations, const CommandLineParser &parser, qint64 magicMarker);
     QString readControlScript(const CommandLineParser &parser);
     void dumpLanguageAndArguments() const;
-    void addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager);
     void applyCommandLineOptions(const CommandLineParser &parser);
     QHash<QString, QString> readAndSetCommandLineVariables(const CommandLineParser &parser);
     void installTranslators() const;

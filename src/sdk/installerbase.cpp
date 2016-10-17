@@ -102,7 +102,7 @@ int InstallerBase::run()
 
     m_core.reset(createPackageManagerCore(oldOperations, parser, magicMarker));
 
-    addProductKeyCheckPackagesAndRegisterResourceCollections(manager);
+    SdkCommon::addProductKeyCheckPackagesAndRegisterResourceCollections(m_core.data(), manager);
 
     dumpResourceTree();
 
@@ -220,14 +220,6 @@ void InstallerBase::dumpLanguageAndArguments() const
     qCDebug(QInstaller::lcTranslations) << "Language:" << QLocale().uiLanguages()
         .value(0, QLatin1String("No UI language set")).toUtf8().constData();
     qDebug().noquote() << "Arguments:" << arguments().join(QLatin1String(", "));
-}
-
-void InstallerBase::addProductKeyCheckPackagesAndRegisterResourceCollections(const QInstaller::ResourceCollectionManager &manager)
-{
-    using namespace QInstaller;
-    ProductKeyCheck::instance()->init(m_core.data());
-    ProductKeyCheck::instance()->addPackagesFromXml(QLatin1String(":/metadata/Updates.xml"));
-    BinaryFormatEngineHandler::instance()->registerResources(manager.collections());
 }
 
 void InstallerBase::applyCommandLineOptions(const CommandLineParser &parser)
