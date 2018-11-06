@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -37,6 +32,7 @@
 #include "constants.h"
 #include "component_p.h"
 #include "qinstallerglobal.h"
+#include "packagemanagercore.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QMetaType>
@@ -47,8 +43,6 @@ QT_FORWARD_DECLARE_CLASS(QDebug)
 QT_FORWARD_DECLARE_CLASS(QQmlV4Function)
 
 namespace QInstaller {
-
-class PackageManagerCore;
 
 class INSTALLER_EXPORT Component : public QObject, public ComponentModelHelper
 {
@@ -67,6 +61,7 @@ class INSTALLER_EXPORT Component : public QObject, public ComponentModelHelper
     Q_PROPERTY(bool default READ isDefault)
     Q_PROPERTY(bool installed READ isInstalled)
     Q_PROPERTY(bool enabled READ isEnabled WRITE setEnabled)
+    Q_PROPERTY(bool unstable READ isUnstable)
 
 public:
     explicit Component(PackageManagerCore *core);
@@ -76,7 +71,11 @@ public:
     {
         bool operator() (const Component *lhs, const Component *rhs) const
         {
-            return lhs->value(scSortingPriority).toInt() < rhs->value(scSortingPriority).toInt();
+            const int lhsPriority = lhs->value(scSortingPriority).toInt();
+            const int rhsPriority = rhs->value(scSortingPriority).toInt();
+            if (lhsPriority == rhsPriority)
+                return lhs->displayName() > rhs->displayName();
+            return lhsPriority < rhsPriority;
         }
     };
 
@@ -84,7 +83,11 @@ public:
     {
         bool operator() (const Component *lhs, const Component *rhs) const
         {
-            return lhs->value(scSortingPriority).toInt() > rhs->value(scSortingPriority).toInt();
+            const int lhsPriority = lhs->value(scSortingPriority).toInt();
+            const int rhsPriority = rhs->value(scSortingPriority).toInt();
+            if (lhsPriority == rhsPriority)
+                return lhs->displayName() < rhs->displayName();
+            return lhsPriority > rhsPriority;
         }
     };
 
@@ -151,6 +154,7 @@ public:
 
     Q_INVOKABLE void addDependency(const QString &newDependency);
     QStringList dependencies() const;
+    Q_INVOKABLE void addAutoDependOn(const QString &newDependOn);
     QStringList autoDependencies() const;
 
     void languageChanged();
@@ -163,7 +167,7 @@ public:
     Q_INVOKABLE bool isAutoDependOn(const QSet<QString> &componentsToInstall) const;
 
     Q_INVOKABLE void setInstalled();
-    Q_INVOKABLE bool isInstalled() const;
+    Q_INVOKABLE bool isInstalled(const QString version = QString()) const;
     Q_INVOKABLE bool installationRequested() const;
     bool isSelectedForInstallation() const;
 
@@ -178,6 +182,8 @@ public:
 
     Q_INVOKABLE bool componentChangeRequested();
 
+    bool isUnstable() const;
+    void setUnstable(PackageManagerCore::UnstableError error, const QString &errorMessage = QString());
 
     bool isVirtual() const;
     bool isSelected() const;
@@ -208,6 +214,7 @@ private:
         const QString &parameter8 = QString(), const QString &parameter9 = QString(),
         const QString &parameter10 = QString());
     Operation *createOperation(const QString &operationName, const QStringList &parameters);
+    void markComponentUnstable();
 
 private:
     QString validatorCallbackName;

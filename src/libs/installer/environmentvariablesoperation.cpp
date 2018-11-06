@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -70,6 +65,48 @@ static void broadcastEnvironmentChange()
 
 namespace {
 
+bool handleRegExpandSz(const QString &regPath, const QString &name,
+                       const QString &value, QString *errorString,
+                       bool *error)
+{
+    bool setAsExpandSZ = false;
+#ifdef Q_OS_WIN
+    // Account for when it is originally REG_EXPAND_SZ as we don't want
+    // to lose this setting (see Path environment variable)
+    const bool isLocalKey = regPath.startsWith(QStringLiteral("HKEY_LOCAL"));
+    HKEY hkey = isLocalKey ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
+    // Drop the HKEY...\\ part
+    const QString keyPath = regPath.mid(isLocalKey ? 19 : 18, -1);
+    HKEY handle;
+    LONG res = RegOpenKeyEx(hkey, reinterpret_cast<const wchar_t *>(keyPath.utf16()), 0,
+                            KEY_READ, &handle);
+    if (res == ERROR_SUCCESS) {
+        DWORD dataType;
+        DWORD dataSize;
+        res = RegQueryValueEx(handle, reinterpret_cast<const wchar_t *>(name.utf16()), 0,
+                              &dataType, 0, &dataSize);
+        setAsExpandSZ = (res == ERROR_SUCCESS) && (dataType == REG_EXPAND_SZ);
+        if (setAsExpandSZ) {
+            RegCloseKey(handle);
+            res = RegOpenKeyEx(hkey, reinterpret_cast<const wchar_t *>(keyPath.utf16()), 0,
+                               KEY_SET_VALUE, &handle);
+            if (res == ERROR_SUCCESS) {
+                const QByteArray data(reinterpret_cast<const char *>(value.utf16()),
+                                      (value.length() + 1) * 2);
+                res = RegSetValueEx(handle, reinterpret_cast<const wchar_t *>(name.utf16()), 0, REG_EXPAND_SZ,
+                                    reinterpret_cast<const unsigned char*>(data.constData()), data.size());
+                RegCloseKey(handle);
+            }
+            if (res != ERROR_SUCCESS) {
+                *errorString = UpdateOperation::tr("Cannot write to registry path %1.").arg(regPath);
+                *error = true;
+            }
+        }
+    }
+#endif
+    return setAsExpandSZ;
+}
+
 template <typename SettingsType>
 UpdateOperation::Error writeSetting(const QString &regPath,
                                     const QString &name,
@@ -86,6 +123,10 @@ UpdateOperation::Error writeSetting(const QString &regPath,
 
     // remember old value for undo
     *oldValue = registry.value(name).toString();
+
+    bool error = false;
+    if (handleRegExpandSz(regPath, name, value, errorString, &error))
+        return error ? UpdateOperation::UserDefinedError : UpdateOperation::NoError;
 
     // set the new value
     registry.setValue(name, value);
@@ -113,6 +154,11 @@ UpdateOperation::Error undoSetting(const QString &regPath,
     }
     if (actual != value) //key changed, don't undo
         return UpdateOperation::UserDefinedError;
+
+    bool error = false;
+    if (handleRegExpandSz(regPath, name, oldValue, errorString, &error))
+        return error ? UpdateOperation::UserDefinedError : UpdateOperation::NoError;
+
     QString dontcare;
     return writeSetting<SettingsType>(regPath, name, oldValue, errorString, &dontcare);
 }

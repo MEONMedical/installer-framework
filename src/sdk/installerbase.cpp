@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -57,10 +52,15 @@
 
 #include <QDir>
 #include <QDirIterator>
+#include <QFontDatabase>
 #include <QTemporaryFile>
 #include <QTranslator>
 #include <QUuid>
 #include <QLoggingCategory>
+
+#ifdef ENABLE_SQUISH
+#include <qtbuiltinhook.h>
+#endif
 
 InstallerBase::InstallerBase(int &argc, char *argv[])
     : SDKApp<QApplication>(argc, argv)
@@ -168,7 +168,14 @@ int InstallerBase::run()
             + m_core->settings().controlScript();
     }
 
-    if (parser.isSet(QLatin1String(CommandLineOptions::Proxy))) {
+    // From Qt5.8 onwards a separate command line option --proxy is not needed as system
+    // proxy is used by default. If Qt is built with QT_USE_SYSTEM_PROXIES false
+    // then system proxies are not used by default.
+    if ((parser.isSet(QLatin1String(CommandLineOptions::Proxy))
+#if QT_VERSION > 0x050800
+            || QNetworkProxyFactory::usesSystemConfiguration()
+#endif
+            ) && !parser.isSet(QLatin1String(CommandLineOptions::NoProxy))) {
         m_core->settings().setProxyType(QInstaller::Settings::SystemProxy);
         KDUpdater::FileDownloaderFactory::instance().setProxyFactory(m_core->proxyFactory());
     }
@@ -216,6 +223,20 @@ int InstallerBase::run()
         m_core->setTemporaryRepositories(repoList, true);
     }
 
+    if (parser.isSet(QLatin1String(CommandLineOptions::InstallCompressedRepository))) {
+        const QStringList repoList = repositories(parser
+            .value(QLatin1String(CommandLineOptions::InstallCompressedRepository)));
+        if (repoList.isEmpty())
+            throw QInstaller::Error(QLatin1String("Empty repository list for option 'installCompressedRepository'."));
+        foreach (QString repository, repoList) {
+            if (!QFileInfo::exists(repository)) {
+                qDebug() << "The file " << repository << "does not exist.";
+                return EXIT_FAILURE;
+            }
+        }
+        m_core->setTemporaryRepositories(repoList, false, true);
+    }
+
     QInstaller::PackageManagerCore::setNoForceInstallation(parser
         .isSet(QLatin1String(CommandLineOptions::NoForceInstallation)));
     QInstaller::PackageManagerCore::setCreateLocalRepositoryFromBinary(parser
@@ -247,7 +268,7 @@ int InstallerBase::run()
                     QCoreApplication::instance()->installTranslator(qtTranslator.take());
 
                 QScopedPointer<QTranslator> ifwTranslator(new QTranslator(QCoreApplication::instance()));
-                if (ifwTranslator->load(locale, QString(), QString(), directory))
+                if (ifwTranslator->load(locale, QLatin1String("ifw"), QLatin1String("_"), directory))
                     QCoreApplication::instance()->installTranslator(ifwTranslator.take());
 
                 // To stop loading other translations it's sufficient that
@@ -263,45 +284,82 @@ int InstallerBase::run()
         }
     }
 
-    //create the wizard GUI
-    TabController controller(0);
-    controller.setManager(m_core);
-    controller.setManagerParams(params);
-    controller.setControlScript(controlScript);
+    {
+        QDirIterator fontIt(QStringLiteral(":/fonts"));
+        while (fontIt.hasNext()) {
+            const QString path = fontIt.next();
+            qCDebug(QInstaller::lcResources) << "Registering custom font" << path;
+            if (QFontDatabase::addApplicationFont(path) == -1)
+                qWarning() << "Failed to register font!";
+        }
+    }
 
-    if (m_core->isInstaller()) {
-        controller.setGui(new InstallerGui(m_core));
+    //Do not show gui with --silentUpdate, instead update components silently
+    if (parser.isSet(QLatin1String(CommandLineOptions::SilentUpdate))) {
+        if (m_core->isInstaller())
+            throw QInstaller::Error(QLatin1String("Cannot start installer binary as updater."));
+        const ProductKeyCheck *const productKeyCheck = ProductKeyCheck::instance();
+        if (!productKeyCheck->hasValidLicense())
+            throw QInstaller::Error(QLatin1String("Silent update not allowed."));
+        m_core->setUpdater();
+        m_core->updateComponentsSilently();
     }
     else {
-        controller.setGui(new MaintenanceGui(m_core));
-        //Start listening to setValue changes that newly installed components might have
-        connect(m_core, &QInstaller::PackageManagerCore::valueChanged, &controller,
-            &TabController::updateManagerParams);
-    }
-    QInstaller::PackageManagerCore::Status status =
-        QInstaller::PackageManagerCore::Status(controller.init());
-    if (status != QInstaller::PackageManagerCore::Success)
-        return status;
+        //create the wizard GUI
+        TabController controller(0);
+        controller.setManager(m_core);
+        controller.setManagerParams(params);
+        controller.setControlScript(controlScript);
+        if (m_core->isInstaller()) {
+            controller.setGui(new InstallerGui(m_core));
+        }
+        else {
+            controller.setGui(new MaintenanceGui(m_core));
+            //Start listening to setValue changes that newly installed components might have
+            connect(m_core, &QInstaller::PackageManagerCore::valueChanged, &controller,
+                &TabController::updateManagerParams);
+        }
 
-    const int result = QCoreApplication::instance()->exec();
-    if (result != 0)
-        return result;
-
-    if (m_core->finishedWithSuccess())
-        return QInstaller::PackageManagerCore::Success;
-
-    status = m_core->status();
-    switch (status) {
-        case QInstaller::PackageManagerCore::Success:
+        QInstaller::PackageManagerCore::Status status =
+            QInstaller::PackageManagerCore::Status(controller.init());
+        if (status != QInstaller::PackageManagerCore::Success)
             return status;
 
-        case QInstaller::PackageManagerCore::Canceled:
-            return status;
+#ifdef ENABLE_SQUISH
+        int squishPort = 11233;
+        if (parser.isSet(QLatin1String(CommandLineOptions::SquishPort))) {
+            squishPort = parser.value(QLatin1String(CommandLineOptions::SquishPort)).toInt();
+        }
+        if (squishPort != 0) {
+            if (Squish::allowAttaching(squishPort))
+                qDebug() << "Attaching to squish port " << squishPort << " succeeded";
+            else
+                qDebug() << "Attaching to squish failed.";
+        } else {
+            qWarning() << "Invalid squish port number: " << squishPort;
+        }
+#endif
+        const int result = QCoreApplication::instance()->exec();
+        if (result != 0)
+            return result;
 
-        default:
-            break;
+        if (m_core->finishedWithSuccess())
+            return QInstaller::PackageManagerCore::Success;
+
+        status = m_core->status();
+        switch (status) {
+            case QInstaller::PackageManagerCore::Success:
+                return status;
+
+            case QInstaller::PackageManagerCore::Canceled:
+                return status;
+
+            default:
+                break;
+        }
+        return QInstaller::PackageManagerCore::Failure;
     }
-    return QInstaller::PackageManagerCore::Failure;
+    return QInstaller::PackageManagerCore::Success;
 }
 
 

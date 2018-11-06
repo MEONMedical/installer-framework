@@ -1,31 +1,26 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB)
-** Contact: http://www.qt.io/licensing/
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -186,8 +181,13 @@ struct KDUpdater::FileDownloader::Private
         , m_assumedSha1Sum("")
         , autoRemove(true)
         , m_speedTimerInterval(100)
+        , m_downloadDeadlineTimerInterval(30000)
+        , m_downloadPaused(false)
+        , m_downloadResumed(false)
         , m_bytesReceived(0)
         , m_bytesToReceive(0)
+        , m_bytesBeforeResume(0)
+        , m_totalBytesBeforeResume(0)
         , m_currentSpeedBin(0)
         , m_sampleIndex(0)
         , m_downloadSpeed(0)
@@ -212,11 +212,18 @@ struct KDUpdater::FileDownloader::Private
     bool autoRemove;
     bool followRedirect;
 
-    QBasicTimer m_timer;
+    QBasicTimer m_speedIntervalTimer;
     int m_speedTimerInterval;
+
+    QBasicTimer m_downloadDeadlineTimer;
+    int m_downloadDeadlineTimerInterval;
+    bool m_downloadPaused;
+    bool m_downloadResumed;
 
     qint64 m_bytesReceived;
     qint64 m_bytesToReceive;
+    qint64 m_bytesBeforeResume;
+    qint64 m_totalBytesBeforeResume;
 
     mutable qint64 m_samples[50];
     mutable qint64 m_currentSpeedBin;
@@ -387,8 +394,8 @@ void KDUpdater::FileDownloader::cancelDownload()
 */
 void KDUpdater::FileDownloader::runDownloadSpeedTimer()
 {
-    if (!d->m_timer.isActive())
-        d->m_timer.start(d->m_speedTimerInterval, this);
+    if (!d->m_speedIntervalTimer.isActive())
+        d->m_speedIntervalTimer.start(d->m_speedTimerInterval, this);
 }
 
 /*!
@@ -396,7 +403,97 @@ void KDUpdater::FileDownloader::runDownloadSpeedTimer()
 */
 void KDUpdater::FileDownloader::stopDownloadSpeedTimer()
 {
-    d->m_timer.stop();
+    d->m_speedIntervalTimer.stop();
+}
+
+/*!
+    Restarts the download deadline timer.
+*/
+void KDUpdater::FileDownloader::runDownloadDeadlineTimer()
+{
+  stopDownloadDeadlineTimer();
+  d->m_downloadDeadlineTimer.start(d->m_downloadDeadlineTimerInterval, this);
+}
+
+/*!
+    Stops the download deadline timer.
+*/
+void KDUpdater::FileDownloader::stopDownloadDeadlineTimer()
+{
+    d->m_downloadDeadlineTimer.stop();
+}
+
+/*!
+    Sets the download into a paused state.
+*/
+void KDUpdater::FileDownloader::setDownloadPaused(bool paused)
+{
+    d->m_downloadPaused = paused;
+}
+
+/*!
+    Gets the download paused state.
+*/
+bool KDUpdater::FileDownloader::isDownloadPaused()
+{
+    return d->m_downloadPaused;
+}
+
+/*!
+    Sets the download into a paused state.
+*/
+void KDUpdater::FileDownloader::setDownloadResumed(bool resumed)
+{
+    d->m_downloadResumed = resumed;
+}
+
+/*!
+    Gets the download resumed state.
+*/
+bool KDUpdater::FileDownloader::isDownloadResumed()
+{
+    return d->m_downloadResumed;
+}
+
+/*!
+    Gets the amount of bytes downloaded before download resume.
+*/
+qint64 KDUpdater::FileDownloader::bytesDownloadedBeforeResume()
+{
+    return d->m_bytesBeforeResume;
+}
+
+/*!
+    Gets the total amount of bytes downloaded before download resume.
+*/
+qint64 KDUpdater::FileDownloader::totalBytesDownloadedBeforeResume()
+{
+    return d->m_totalBytesBeforeResume;
+}
+
+/*!
+    Clears the amount of bytes downloaded before download resume.
+*/
+void KDUpdater::FileDownloader::clearBytesDownloadedBeforeResume()
+{
+    d->m_bytesBeforeResume = 0;
+    d->m_totalBytesBeforeResume = 0;
+}
+
+/*!
+    Updates the amount of bytes downloaded before download resume.
+*/
+void KDUpdater::FileDownloader::updateBytesDownloadedBeforeResume(qint64 bytes)
+{
+    d->m_bytesBeforeResume += bytes;
+}
+
+/*!
+    Updates the total amount of bytes downloaded before download resume.
+*/
+void KDUpdater::FileDownloader::updateTotalBytesDownloadedBeforeResume()
+{
+    d->m_totalBytesBeforeResume = d->m_bytesBeforeResume;
 }
 
 /*!
@@ -412,7 +509,15 @@ void KDUpdater::FileDownloader::addSample(qint64 sample)
 */
 int KDUpdater::FileDownloader::downloadSpeedTimerId() const
 {
-    return d->m_timer.timerId();
+    return d->m_speedIntervalTimer.timerId();
+}
+
+/*!
+    Returns the download deadline timer ID.
+*/
+int KDUpdater::FileDownloader::downloadDeadlineTimerId() const
+{
+    return d->m_downloadDeadlineTimer.timerId();
 }
 
 /*!
@@ -555,6 +660,17 @@ void KDUpdater::FileDownloader::resetCheckSumData()
     d->m_hash.reset();
 }
 
+/*!
+    Creates a directory structure for \a fileName if it does not exist.
+*/
+void KDUpdater::FileDownloader::createDirectoryForFile(const QString fileName)
+{
+    QFileInfo fileInfo(fileName);
+    if (!fileInfo.absoluteDir().exists()) {
+        QDir filePath = fileInfo.absoluteDir();
+        filePath.mkdir(filePath.absolutePath());
+    }
+}
 
 /*!
     Returns a copy of the proxy factory that this FileDownloader object is using to determine the
@@ -709,6 +825,7 @@ void KDUpdater::LocalFileDownloader::doDownload()
         file->open();
         d->destination = file;
     } else {
+        createDirectoryForFile(d->destFileName);
         d->destination = new QFile(d->destFileName, this);
         d->destination->open(QIODevice::ReadWrite | QIODevice::Truncate);
     }
@@ -797,7 +914,6 @@ void KDUpdater::LocalFileDownloader::timerEvent(QTimerEvent *event)
         }
         addSample(numRead);
         addCheckSumData(buffer.data(), numRead);
-
         if (numRead > 0) {
             setProgress(d->source->pos(), d->source->size());
             emit downloadProgress(calcProgress(d->source->pos(), d->source->size()));
@@ -1055,21 +1171,31 @@ struct KDUpdater::HttpDownloader::Private
     HttpDownloader *const q;
     QNetworkAccessManager manager;
     QNetworkReply *http;
+    QUrl sourceUrl;
     QFile *destination;
     QString destFileName;
     bool downloaded;
     bool aborted;
     int m_authenticationCount;
 
-    void shutDown()
+    void shutDown(bool closeDestination = true)
     {
-        disconnect(http, &QNetworkReply::finished, q, &HttpDownloader::httpReqFinished);
-        http->deleteLater();
+        if (http) {
+            disconnect(http, &QNetworkReply::finished, q, &HttpDownloader::httpReqFinished);
+            disconnect(http, &QNetworkReply::downloadProgress,
+                       q, &HttpDownloader::httpReadProgress);
+            void (QNetworkReply::*errorSignal)(QNetworkReply::NetworkError) = &QNetworkReply::error;
+
+            disconnect(http, errorSignal, q, &HttpDownloader::httpError);
+            http->deleteLater();
+        }
         http = 0;
-        destination->close();
-        destination->deleteLater();
-        destination = 0;
-        q->resetCheckSumData();
+        if (closeDestination) {
+            destination->close();
+            destination->deleteLater();
+            destination = 0;
+            q->resetCheckSumData();
+        }
     }
 };
 
@@ -1086,6 +1212,9 @@ KDUpdater::HttpDownloader::HttpDownloader(QObject *parent)
 #endif
     connect(&d->manager, &QNetworkAccessManager::authenticationRequired,
             this, &HttpDownloader::onAuthenticationRequired);
+    connect(&d->manager, &QNetworkAccessManager::networkAccessibleChanged,
+            this, &HttpDownloader::onNetworkAccessibleChanged);
+
 }
 
 /*!
@@ -1128,6 +1257,7 @@ void KDUpdater::HttpDownloader::doDownload()
 
     startDownload(url());
     runDownloadSpeedTimer();
+    runDownloadDeadlineTimer();
 }
 
 /*!
@@ -1157,6 +1287,8 @@ KDUpdater::HttpDownloader *KDUpdater::HttpDownloader::clone(QObject *parent) con
 
 void KDUpdater::HttpDownloader::httpReadyRead()
 {
+    if (d->http == 0 || d->destination == 0)
+      return;
     static QByteArray buffer(16384, '\0');
     while (d->http->bytesAvailable()) {
         const qint64 read = d->http->read(buffer.data(), buffer.size());
@@ -1175,6 +1307,7 @@ void KDUpdater::HttpDownloader::httpReadyRead()
         }
         addSample(written);
         addCheckSumData(buffer.data(), read);
+        updateBytesDownloadedBeforeResume(written);
     }
 }
 
@@ -1199,6 +1332,10 @@ void KDUpdater::HttpDownloader::cancelDownload()
 void KDUpdater::HttpDownloader::httpDone(bool error)
 {
     if (error) {
+        if (isDownloadResumed()) {
+            d->shutDown(false);
+            return;
+        }
         QString err;
         if (d->http) {
             err = d->http->errorString();
@@ -1212,9 +1349,10 @@ void KDUpdater::HttpDownloader::httpDone(bool error)
             setDownloadCanceled();
         } else {
             setDownloadAborted(err);
+            return;
         }
     }
-    //PENDING: what about the non-error case??
+    setDownloadResumed(false);
 }
 
 /*!
@@ -1228,6 +1366,7 @@ void KDUpdater::HttpDownloader::onError()
     delete d->destination;
     d->destination = 0;
     stopDownloadSpeedTimer();
+    stopDownloadDeadlineTimer();
 }
 
 /*!
@@ -1237,12 +1376,16 @@ void KDUpdater::HttpDownloader::onError()
 void KDUpdater::HttpDownloader::onSuccess()
 {
     d->downloaded = true;
-    d->destFileName = d->destination->fileName();
-    if (QTemporaryFile *file = dynamic_cast<QTemporaryFile *>(d->destination))
-        file->setAutoRemove(false);
+    if (d->destination) {
+        d->destFileName = d->destination->fileName();
+        if (QTemporaryFile *file = dynamic_cast<QTemporaryFile *>(d->destination))
+            file->setAutoRemove(false);
+    }
     delete d->destination;
     d->destination = 0;
     stopDownloadSpeedTimer();
+    stopDownloadDeadlineTimer();
+    setDownloadResumed(false);
 }
 
 void KDUpdater::HttpDownloader::httpReqFinished()
@@ -1271,9 +1414,11 @@ void KDUpdater::HttpDownloader::httpReqFinished()
             }
         }
         httpReadyRead();
-        d->destination->flush();
+        if (d->destination)
+            d->destination->flush();
         setDownloadCompleted();
-        d->http->deleteLater();
+        if (d->http)
+            d->http->deleteLater();
         d->http = 0;
     }
 }
@@ -1286,8 +1431,16 @@ void KDUpdater::HttpDownloader::httpReadProgress(qint64 done, qint64 total)
             return; // if we are a redirection, do not emit the progress
     }
 
-    setProgress(done, total);
-    emit downloadProgress(calcProgress(done, total));
+    if (isDownloadResumed())
+        setProgress(done + totalBytesDownloadedBeforeResume(),
+                    total + totalBytesDownloadedBeforeResume());
+    else
+        setProgress(done, total);
+    runDownloadDeadlineTimer();
+    if (isDownloadResumed())
+        emit downloadProgress(calcProgress(done + totalBytesDownloadedBeforeResume(), total + totalBytesDownloadedBeforeResume()));
+    else
+        emit downloadProgress(calcProgress(done, total));
 }
 
 /*!
@@ -1300,15 +1453,19 @@ void KDUpdater::HttpDownloader::timerEvent(QTimerEvent *event)
         emitDownloadStatus();
         emitDownloadProgress();
         emitEstimatedDownloadTime();
+    } else if (event->timerId() == downloadDeadlineTimerId()) {
+        d->shutDown(false);
+        resumeDownload();
     }
 }
 
 void KDUpdater::HttpDownloader::startDownload(const QUrl &url)
 {
+    d->sourceUrl = url;
     d->m_authenticationCount = 0;
     d->manager.setProxyFactory(proxyFactory());
+    clearBytesDownloadedBeforeResume();
     d->http = d->manager.get(QNetworkRequest(url));
-
     connect(d->http, &QIODevice::readyRead, this, &HttpDownloader::httpReadyRead);
     connect(d->http, &QNetworkReply::downloadProgress,
             this, &HttpDownloader::httpReadProgress);
@@ -1321,6 +1478,7 @@ void KDUpdater::HttpDownloader::startDownload(const QUrl &url)
         file->open();
         d->destination = file;
     } else {
+        createDirectoryForFile(d->destFileName);
         d->destination = new QFile(d->destFileName, this);
         d->destination->open(QIODevice::ReadWrite | QIODevice::Truncate);
     }
@@ -1332,6 +1490,28 @@ void KDUpdater::HttpDownloader::startDownload(const QUrl &url)
         setDownloadAborted(tr("Cannot download %1. Cannot create file \"%2\": %3").arg(
             url.toString(), fileName, error));
     }
+}
+
+void KDUpdater::HttpDownloader::resumeDownload()
+{
+    updateTotalBytesDownloadedBeforeResume();
+    d->m_authenticationCount = 0;
+    QNetworkRequest request(d->sourceUrl);
+
+    request.setRawHeader(QByteArray("Range"),
+                         QString(QStringLiteral("bytes=%1-"))
+                         .arg(bytesDownloadedBeforeResume())
+                         .toLatin1());
+    setDownloadResumed(true);
+    d->http = d->manager.get(request);
+    connect(d->http, &QIODevice::readyRead, this, &HttpDownloader::httpReadyRead);
+    connect(d->http, &QNetworkReply::downloadProgress,
+            this, &HttpDownloader::httpReadProgress);
+    connect(d->http, &QNetworkReply::finished, this, &HttpDownloader::httpReqFinished);
+    void (QNetworkReply::*errorSignal)(QNetworkReply::NetworkError) = &QNetworkReply::error;
+    connect(d->http, errorSignal, this, &HttpDownloader::httpError);
+    runDownloadSpeedTimer();
+    runDownloadDeadlineTimer();
 }
 
 void KDUpdater::HttpDownloader::onAuthenticationRequired(QNetworkReply *reply, QAuthenticator *authenticator)
@@ -1369,6 +1549,21 @@ void KDUpdater::HttpDownloader::onAuthenticationRequired(QNetworkReply *reply, Q
         }
         d->m_authenticationCount++;
     }
+}
+
+void KDUpdater::HttpDownloader::onNetworkAccessibleChanged(QNetworkAccessManager::NetworkAccessibility accessible)
+{
+  if (accessible == QNetworkAccessManager::NotAccessible) {
+      d->shutDown(false);
+      setDownloadPaused(true);
+      setDownloadResumed(false);
+      stopDownloadDeadlineTimer();
+  } else if (accessible == QNetworkAccessManager::Accessible) {
+      if (isDownloadPaused()) {
+          setDownloadPaused(false);
+          resumeDownload();
+      }
+  }
 }
 
 #ifndef QT_NO_SSL

@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -59,6 +54,7 @@
 #include <QtConcurrentRun>
 
 #include <QtCore/QMutex>
+#include <QtCore/QRegExp>
 #include <QtCore/QSettings>
 #include <QtCore/QTemporaryFile>
 #include <QtCore/QTextCodec>
@@ -731,7 +727,7 @@ void PackageManagerCore::rollBackInstallation()
 
             const QString componentName = operation->value(QLatin1String("component")).toString();
             if (!componentName.isEmpty()) {
-                Component *component = componentByName(componentName);
+                Component *component = componentByName(checkableName(componentName));
                 if (!component)
                     component = d->componentsToReplace().value(componentName).second;
                 if (component) {
@@ -848,13 +844,13 @@ PackageManagerCore::PackageManagerCore(qint64 magicmaker, const QList<OperationB
     qRegisterMetaType<QInstaller::PackageManagerCore::Status>("QInstaller::PackageManagerCore::Status");
     qRegisterMetaType<QInstaller::PackageManagerCore::WizardPage>("QInstaller::PackageManagerCore::WizardPage");
 
+    d->initialize(QHash<QString, QString>());
     // Creates and initializes a remote client, makes us get admin rights for QFile, QSettings
     // and QProcess operations. Init needs to called to set the server side authorization key.
-    RemoteClient::instance().init(socketName, key, mode, Protocol::StartAs::SuperUser);
-
-    d->initialize(QHash<QString, QString>());
-
-    RemoteClient::instance().setAuthorizationFallbackDisabled(settings().disableAuthorizationFallback());
+    if (!d->isUpdater()) {
+        RemoteClient::instance().init(socketName, key, mode, Protocol::StartAs::SuperUser);
+        RemoteClient::instance().setAuthorizationFallbackDisabled(settings().disableAuthorizationFallback());
+    }
 
     //
     // Sanity check to detect a broken installations with missing operations.
@@ -1153,8 +1149,36 @@ PackagesList PackageManagerCore::remotePackages()
 }
 
 /*!
+    Checks for compressed packages to install. Returns \c true if newer versions exist
+    and they can be installed.
+*/
+bool PackageManagerCore::fetchCompressedPackagesTree()
+{
+    const LocalPackagesHash installedPackages = d->localInstalledPackages();
+    if (!isInstaller() && status() == Failure)
+        return false;
+
+    if (!d->fetchMetaInformationFromCompressedRepositories())
+        return false;
+
+    if (!d->addUpdateResourcesFromRepositories(true, true)) {
+        return false;
+    }
+
+    PackagesList packages;
+    const PackagesList &compPackages = d->compressedPackages();
+    if (compPackages.isEmpty())
+        return false;
+    packages.append(compPackages);
+    const PackagesList &rPackages = d->remotePackages();
+    packages.append(rPackages);
+
+    return fetchPackagesTree(packages, installedPackages);
+}
+
+/*!
     Checks for packages to install. Returns \c true if newer versions exist
-    and they can be installed and sets the status of the update to \c Success.
+    and they can be installed.
 */
 bool PackageManagerCore::fetchRemotePackagesTree()
 {
@@ -1177,12 +1201,20 @@ bool PackageManagerCore::fetchRemotePackagesTree()
     if (!d->fetchMetaInformationFromRepositories())
         return false;
 
+    if (!d->fetchMetaInformationFromCompressedRepositories())
+        return false;
+
     if (!d->addUpdateResourcesFromRepositories(true))
         return false;
 
     const PackagesList &packages = d->remotePackages();
     if (packages.isEmpty())
         return false;
+
+    return fetchPackagesTree(packages, installedPackages);
+}
+
+bool PackageManagerCore::fetchPackagesTree(const PackagesList &packages, const LocalPackagesHash installedPackages) {
 
     bool success = false;
     if (!isUpdater()) {
@@ -1291,6 +1323,12 @@ bool PackageManagerCore::setDefaultPageVisible(int page, bool visible)
     Sets a validator for the custom page specified by \a name and \a callbackName
     for the component \a component.
 
+    When using this, \a name has to match a dynamic page starting with \c Dynamic. For example, if the page
+    is called DynamicReadyToInstallWidget, then \a name should be set to \c ReadyToInstallWidget. The
+    \a callbackName should be set to a function that returns a boolean. When the \c Next button is pressed
+    on the custom page, then it will call the \a callbackName function. If this returns \c true, then it will
+    move to the next page.
+
     \sa {installer::setValidatorForCustomPage}{installer.setValidatorForCustomPage}
     \sa setValidatorForCustomPageRequested()
  */
@@ -1366,12 +1404,12 @@ void PackageManagerCore::addUserRepositories(const QStringList &repositories)
     \sa {installer::setTemporaryRepositories}{installer.setTemporaryRepositories}
     \sa addUserRepositories()
 */
-void PackageManagerCore::setTemporaryRepositories(const QStringList &repositories, bool replace)
+void PackageManagerCore::setTemporaryRepositories(const QStringList &repositories, bool replace,
+                                                  bool compressed)
 {
     QSet<Repository> repositorySet;
     foreach (const QString &repository, repositories)
-        repositorySet.insert(Repository::fromUserInput(repository));
-
+        repositorySet.insert(Repository::fromUserInput(repository, compressed));
     settings().setTemporaryRepositories(repositorySet, replace);
 }
 
@@ -1519,12 +1557,9 @@ Component *PackageManagerCore::componentByName(const QString &name, const QList<
         return 0;
 
     QString fixedVersion;
-    QString fixedName = name;
-    if (name.contains(QChar::fromLatin1('-'))) {
-        // the last part is considered to be the version, then
-        fixedVersion = name.section(QLatin1Char('-'), 1);
-        fixedName = name.section(QLatin1Char('-'), 0, 0);
-    }
+    QString fixedName;
+
+    parseNameAndVersion(name, &fixedName, &fixedVersion);
 
     foreach (Component *component, components) {
         if (componentMatches(component, fixedName, fixedVersion))
@@ -1593,6 +1628,52 @@ bool PackageManagerCore::calculateComponentsToInstall() const
 QList<Component*> PackageManagerCore::orderedComponentsToInstall() const
 {
     return d->installerCalculator()->orderedComponentsToInstall();
+}
+
+bool PackageManagerCore::calculateComponents(QString *displayString)
+{
+    QString htmlOutput;
+    QString lastInstallReason;
+    if (!calculateComponentsToUninstall() ||
+            !calculateComponentsToInstall()) {
+        htmlOutput.append(QString::fromLatin1("<h2><font color=\"red\">%1</font></h2><ul>")
+                          .arg(tr("Cannot resolve all dependencies.")));
+        //if we have a missing dependency or a recursion we can display it
+        if (!componentsToInstallError().isEmpty()) {
+            htmlOutput.append(QString::fromLatin1("<li> %1 </li>").arg(
+                                  componentsToInstallError()));
+        }
+        htmlOutput.append(QLatin1String("</ul>"));
+        if (displayString)
+            *displayString = htmlOutput;
+        return false;
+    }
+
+    // In case of updater mode we don't uninstall components.
+    if (!isUpdater()) {
+        QList<Component*> componentsToRemove = componentsToUninstall();
+        if (!componentsToRemove.isEmpty()) {
+            htmlOutput.append(QString::fromLatin1("<h3>%1</h3><ul>").arg(tr("Components about to "
+                "be removed.")));
+            foreach (Component *component, componentsToRemove)
+                htmlOutput.append(QString::fromLatin1("<li> %1 </li>").arg(component->name()));
+            htmlOutput.append(QLatin1String("</ul>"));
+        }
+    }
+
+    foreach (Component *component, orderedComponentsToInstall()) {
+        const QString reason = installReason(component);
+        if (lastInstallReason != reason) {
+            if (!lastInstallReason.isEmpty()) // means we had to close the previous list
+                htmlOutput.append(QLatin1String("</ul>"));
+            htmlOutput.append(QString::fromLatin1("<h3>%1</h3><ul>").arg(reason));
+            lastInstallReason = reason;
+        }
+        htmlOutput.append(QString::fromLatin1("<li> %1 </li>").arg(component->name()));
+    }
+    if (displayString)
+        *displayString = htmlOutput;
+    return true;
 }
 
 /*!
@@ -1673,14 +1754,13 @@ QList<Component*> PackageManagerCore::dependees(const Component *_component) con
     if (availableComponents.isEmpty())
         return QList<Component *>();
 
-    const QLatin1Char dash('-');
     QList<Component *> dependees;
+    QString name;
+    QString version;
     foreach (Component *component, availableComponents) {
         const QStringList &dependencies = component->dependencies();
         foreach (const QString &dependency, dependencies) {
-            // the last part is considered to be the version then
-            const QString name = dependency.contains(dash) ? dependency.section(dash, 0, 0) : dependency;
-            const QString version = dependency.contains(dash) ? dependency.section(dash, 1) : QString();
+            parseNameAndVersion(dependency, &name, &version);
             if (componentMatches(_component, name, version))
                 dependees.append(component);
         }
@@ -1716,6 +1796,65 @@ ComponentModel *PackageManagerCore::updaterComponentModel() const
     connect(this, &PackageManagerCore::finishUpdaterComponentsReset, d->m_updaterModel,
         &ComponentModel::setRootComponents);
     return d->m_updaterModel;
+}
+
+void PackageManagerCore::updateComponentsSilently()
+{
+    //Check if there are processes running in the install
+    QStringList excludeFiles;
+    excludeFiles.append(maintenanceToolName());
+
+    QStringList runningProcesses = d->runningInstallerProcesses(excludeFiles);
+    if (!runningProcesses.isEmpty()) {
+        qDebug() << "Unable to update components. Please stop these processes: "
+                 << runningProcesses << " and try again.";
+        return;
+    }
+
+    autoAcceptMessageBoxes();
+
+    //Prevent infinite loop if installation for some reason fails.
+    setMessageBoxAutomaticAnswer(QLatin1String("installationErrorWithRetry"), QMessageBox::Cancel);
+
+    fetchRemotePackagesTree();
+
+    const QList<QInstaller::Component*> componentList = components(
+        ComponentType::Root | ComponentType::Descendants);
+
+    if (componentList.count() ==  0) {
+        qDebug() << "No updates available.";
+    } else {
+        // Check if essential components are available (essential components are disabled).
+        // If essential components are found, update first essential updates,
+        // restart installer and install rest of the updates.
+        bool essentialUpdatesFound = false;
+        foreach (Component *component, componentList) {
+            if (component->value(scEssential, scFalse).toLower() == scTrue)
+                essentialUpdatesFound = true;
+        }
+        if (!essentialUpdatesFound) {
+            //Mark all components to be updated
+            foreach (Component *comp, componentList) {
+                comp->setCheckState(Qt::Checked);
+            }
+        }
+        QString htmlOutput;
+        bool componentsOk = calculateComponents(&htmlOutput);
+        if (componentsOk) {
+            if (runPackageUpdater()) {
+                writeMaintenanceTool();
+                if (essentialUpdatesFound) {
+                    qDebug() << "Essential components updated successfully.";
+                }
+                else {
+                    qDebug() << "Components updated successfully.";
+                }
+            }
+        }
+        else {
+            qDebug() << htmlOutput;
+        }
+    }
 }
 
 /*!
@@ -1967,9 +2106,12 @@ bool PackageManagerCore::operationExists(const QString &name)
 }
 
 /*!
-    Instantly performs the operation \a name with \a arguments.
+    Performs the operation \a name with \a arguments.
 
     Returns \c false if the operation cannot be created or executed.
+
+    \note The operation is performed threaded. It is not advised to call
+    this function after installation finished signals.
 
     \sa {installer::performOperation}{installer.performOperation}
 */
@@ -2432,6 +2574,17 @@ bool PackageManagerCore::updateComponentData(struct Data &data, Component *compo
             return false;
         }
 
+        if (settings().allowUnstableComponents()) {
+            // Check if there are sha checksum mismatch. Component will still show in install tree
+            // but is unselectable.
+            foreach (const QString packageName, d->m_metadataJob.shaMismatchPackages()) {
+                if (packageName == component->name()) {
+                    QString errorString = QLatin1String("SHA mismatch detected for component ") + packageName;
+                    component->setUnstable(PackageManagerCore::UnstableError::ShaMismatch, errorString);
+                }
+            }
+        }
+
         component->setUninstalled();
         const QString localPath = component->localTempPath();
         if (isVerbose()) {
@@ -2507,23 +2660,24 @@ void PackageManagerCore::storeReplacedComponents(QHash<QString, Component *> &co
     // remember all components that got a replacement, required for uninstall
     for (; it != data.replacementToExchangeables.constEnd(); ++it) {
         foreach (const QString &componentName, it.value()) {
-            Component *component = components.take(componentName);
-            // if one component has a replaces which is not existing in the current component list anymore
-            // just ignore it
-            if (!component) {
-                // This case can happen when in installer mode, but should not occur when updating
+            Component *componentToReplace = components.take(componentName);
+            if (!componentToReplace) {
+                // If a component replaces another component which is not existing in the
+                // installer binary or the installed component list, just ignore it. This
+                // can happen when in installer mode and probably package manager mode too.
                 if (isUpdater())
-                    qWarning() << componentName << "- Does not exist in the repositories anymore.";
+                    qDebug() << componentName << "- Does not exist in the repositories anymore.";
                 continue;
             }
-            if (!component && !d->componentsToReplace().contains(componentName)) {
-                component = new Component(this);
-                component->setValue(scName, componentName);
+            if (!componentToReplace && !d->componentsToReplace().contains(componentName)) {
+                componentToReplace = new Component(this);
+                componentToReplace->setValue(scName, componentName);
             } else {
-                component->loadComponentScript();
-                d->replacementDependencyComponents().append(component);
+                // This case can happen when in installer mode as well, a component
+                // is in the installer binary and its replacement component as well.
+                d->replacementDependencyComponents().append(componentToReplace);
             }
-            d->componentsToReplace().insert(componentName, qMakePair(it.key(), component));
+            d->componentsToReplace().insert(componentName, qMakePair(it.key(), componentToReplace));
         }
     }
 }
@@ -2673,7 +2827,8 @@ bool PackageManagerCore::fetchUpdaterPackages(const PackagesList &remotes, const
                     return false;
 
                 component->loadComponentScript();
-                component->setCheckState(Qt::Checked);
+                if (!component->isUnstable())
+                    component->setCheckState(Qt::Checked);
             }
 
             // after everything is set up, check installed components
@@ -2685,7 +2840,8 @@ bool PackageManagerCore::fetchUpdaterPackages(const PackagesList &remotes, const
                 if (component->isInstalled()) {
                     // since we do not put them into the model, which would force a update of e.g. tri state
                     // components, we have to check all installed components ourselves
-                    component->setCheckState(Qt::Checked);
+                    if (!component->isUnstable())
+                        component->setCheckState(Qt::Checked);
                 }
             }
 
@@ -2806,4 +2962,53 @@ QStringList PackageManagerCore::filesForDelayedDeletion() const
 void PackageManagerCore::addFilesForDelayedDeletion(const QStringList &files)
 {
     d->m_filesForDelayedDeletion.append(files);
+}
+
+QString PackageManagerCore::checkableName(const QString &name)
+{
+    // to ensure backward compatibility, fix component name with dash (-) symbol
+    if (!name.contains(QLatin1Char(':')))
+        if (name.contains(QLatin1Char('-')))
+            return name + QLatin1Char(':');
+
+    return name;
+}
+
+void PackageManagerCore::parseNameAndVersion(const QString &requirement, QString *name, QString *version)
+{
+    if (requirement.isEmpty()) {
+        if (name)
+            name->clear();
+        if (version)
+            version->clear();
+        return;
+    }
+
+    int pos = requirement.indexOf(QLatin1Char(':'));
+    // to ensure backward compatibility, check dash (-) symbol too
+    if (pos == -1)
+        pos = requirement.indexOf(QLatin1Char('-'));
+    if (pos != -1) {
+        if (name)
+            *name = requirement.left(pos);
+        if (version)
+            *version = requirement.mid(pos + 1);
+    } else {
+        if (name)
+            *name = requirement;
+        if (version)
+            version->clear();
+    }
+}
+
+QStringList PackageManagerCore::parseNames(const QStringList &requirements)
+{
+    QString name;
+    QString version;
+    QStringList names;
+    foreach (const QString &requirement, requirements) {
+        parseNameAndVersion(requirement, &name, &version);
+        names.append(name);
+    }
+    return names;
 }

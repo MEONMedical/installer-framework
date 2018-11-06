@@ -3,8 +3,8 @@
 }
 IFW_PRI_INCLUDED = 1
 
-IFW_VERSION_STR = 2.0.81
-IFW_VERSION = 0x020081
+IFW_VERSION_STR = 3.1.81
+IFW_VERSION = 0x030181
 
 IFW_REPOSITORY_FORMAT_VERSION = 1.0.0
 IFW_NEWLINE = $$escape_expand(\\n\\t)
@@ -77,6 +77,7 @@ win32 {
     QMAKE_BINARY = $${QMAKE_BINARY}.exe
 }
 win32-g++*:QMAKE_CXXFLAGS += -Wno-attributes
+macx:QMAKE_CXXFLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
 
 INCLUDEPATH += \
     $$IFW_SOURCE_TREE/src/libs/7zip \
@@ -125,13 +126,11 @@ DEFINES += NOMINMAX QT_NO_CAST_FROM_ASCII QT_STRICT_ITERATORS QT_USE_QSTRINGBUIL
            IFW_VERSION_STR=$$IFW_VERSION_STR IFW_VERSION=$$IFW_VERSION
 DEFINES += IFW_REPOSITORY_FORMAT_VERSION=$$IFW_REPOSITORY_FORMAT_VERSION
 
-static {
-    LIBS += -l7z
-    win32-g++*: LIBS += -lmpr -luuid
+LIBS += -l7z
+win32-g++*: LIBS += -lmpr -luuid
 
-    equals(TEMPLATE, app) {
-        msvc:POST_TARGETDEPS += $$IFW_LIB_PATH/installer.lib $$IFW_LIB_PATH/7z.lib
-        win32-g++*:POST_TARGETDEPS += $$IFW_LIB_PATH/libinstaller.a $$IFW_LIB_PATH/lib7z.a
-        unix:POST_TARGETDEPS += $$IFW_LIB_PATH/libinstaller.a $$IFW_LIB_PATH/lib7z.a
-    }
+equals(TEMPLATE, app) {
+    msvc:POST_TARGETDEPS += $$IFW_LIB_PATH/installer.lib $$IFW_LIB_PATH/7z.lib
+    win32-g++*:POST_TARGETDEPS += $$IFW_LIB_PATH/libinstaller.a $$IFW_LIB_PATH/lib7z.a
+    unix:POST_TARGETDEPS += $$IFW_LIB_PATH/libinstaller.a $$IFW_LIB_PATH/lib7z.a
 }

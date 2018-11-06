@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -203,6 +198,7 @@ private slots:
         m_core.appendRootComponent(component);
 
         m_scriptEngine = m_core.componentScriptEngine();
+        m_applicatonDirPath = qApp->applicationDirPath();
     }
 
     void testDefaultScriptEngineValues()
@@ -239,6 +235,8 @@ private slots:
             .hasProperty(QLatin1String("displayName")), true);
         QCOMPARE(global.property(QLatin1String("QDesktopServices"))
             .hasProperty(QLatin1String("storageLocation")), true);
+        QCOMPARE(global.property(QLatin1String("QDesktopServices"))
+                 .hasProperty(QLatin1String("findFiles")), true);
 
         QCOMPARE(global.hasProperty(QLatin1String("buttons")), true);
         QCOMPARE(global.hasProperty(QLatin1String("QInstaller")), true);
@@ -282,7 +280,7 @@ private slots:
         // ignore Output from script
         setExpectedScriptOutput("function receive()");
 
-        QTest::ignoreMessage(QtWarningMsg, ":43: ReferenceError: foo is not defined");
+        QTest::ignoreMessage(QtWarningMsg, ":38: ReferenceError: foo is not defined");
         emiter.produceSignal();
 
         const QJSValue value = m_scriptEngine->evaluate("");
@@ -345,6 +343,30 @@ private slots:
         QFAIL(qPrintable(QString::fromLatin1("ScriptEngine error:\n %1").arg(
                            value.toString())));
       }
+    }
+
+    void testFindFiles()
+    {
+        const QString expectedOutput = QString::fromLatin1("Found file %1/tst_scriptengine.moc").arg(m_applicatonDirPath);
+        QByteArray array = expectedOutput.toLatin1();
+        const char *c_str2 = array.data();
+
+        setExpectedScriptOutput(c_str2);
+        const QString script = QString::fromLatin1("var directory = \"C:/Qt/test\";"
+                                                   "\n"
+                                                   "var pattern = \"*.moc\";"
+                                                   "\n"
+                                                   "var fileArray = QDesktopServices.findFiles('%1', pattern)"
+                                                   "\n"
+                                                   "for (i = 0; i < fileArray.length; i++) {"
+                                                   "print(\"Found file \"+fileArray[i]);"
+                                                   "}").arg(m_applicatonDirPath);
+        const QJSValue result = m_scriptEngine->evaluate(script);
+        qDebug()<<result.isArray();
+        qDebug()<<result.isObject();
+        qDebug()<<result.isString();
+        qDebug()<<result.isVariant();
+        QCOMPARE(result.isError(), false);
     }
 
     void loadSimpleComponentScript()
@@ -590,6 +612,7 @@ private:
     PackageManagerCore m_core;
     Component *m_component;
     ScriptEngine *m_scriptEngine;
+    QString m_applicatonDirPath;
 
 };
 

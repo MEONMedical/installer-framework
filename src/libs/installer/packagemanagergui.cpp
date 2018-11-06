@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +39,8 @@
 #include "utils.h"
 #include "scriptengine.h"
 #include "productkeycheck.h"
+#include "repositorycategory.h"
+#include "componentselectionpage_p.h"
 
 #include "sysinfo.h"
 
@@ -61,7 +58,6 @@
 #include <QFileDialog>
 #include <QGridLayout>
 #include <QHBoxLayout>
-#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -72,9 +68,11 @@
 #include <QRadioButton>
 #include <QStringListModel>
 #include <QTextBrowser>
-#include <QTreeView>
+
 #include <QVBoxLayout>
 #include <QShowEvent>
+#include <QFileDialog>
+#include <QGroupBox>
 
 #ifdef Q_OS_WIN
 # include <qt_windows.h>
@@ -848,7 +846,6 @@ void PackageManagerGui::setModified(bool value)
 */
 void PackageManagerGui::showFinishedPage()
 {
-    qDebug() << "SHOW FINISHED PAGE";
     if (d->m_autoSwitchPage)
         next();
     else
@@ -1280,19 +1277,19 @@ IntroductionPage::IntroductionPage(PackageManagerCore *core)
     QWidget *widget = new QWidget(this);
     QVBoxLayout *boxLayout = new QVBoxLayout(widget);
 
-    m_packageManager = new QRadioButton(tr("Add or remove components"), this);
+    m_packageManager = new QRadioButton(tr("&Add or remove components"), this);
     m_packageManager->setObjectName(QLatin1String("PackageManagerRadioButton"));
     boxLayout->addWidget(m_packageManager);
     m_packageManager->setChecked(core->isPackageManager());
     connect(m_packageManager, &QAbstractButton::toggled, this, &IntroductionPage::setPackageManager);
 
-    m_updateComponents = new QRadioButton(tr("Update components"), this);
+    m_updateComponents = new QRadioButton(tr("&Update components"), this);
     m_updateComponents->setObjectName(QLatin1String("UpdaterRadioButton"));
     boxLayout->addWidget(m_updateComponents);
     m_updateComponents->setChecked(core->isUpdater());
     connect(m_updateComponents, &QAbstractButton::toggled, this, &IntroductionPage::setUpdater);
 
-    m_removeAllComponents = new QRadioButton(tr("Remove all components"), this);
+    m_removeAllComponents = new QRadioButton(tr("&Remove all components"), this);
     m_removeAllComponents->setObjectName(QLatin1String("UninstallerRadioButton"));
     boxLayout->addWidget(m_removeAllComponents);
     m_removeAllComponents->setChecked(core->isUninstaller());
@@ -1328,6 +1325,7 @@ IntroductionPage::IntroductionPage(PackageManagerCore *core)
     core->setCompleteUninstallation(core->isUninstaller());
 
     connect(core, &PackageManagerCore::metaJobProgress, this, &IntroductionPage::onProgressChanged);
+    connect(core, &PackageManagerCore::metaJobTotalProgress, this, &IntroductionPage::setTotalProgress);
     connect(core, &PackageManagerCore::metaJobInfoMessage, this, &IntroductionPage::setMessage);
     connect(core, &PackageManagerCore::coreNetworkSettingsChanged,
             this, &IntroductionPage::onCoreNetworkSettingsChanged);
@@ -1517,8 +1515,16 @@ void IntroductionPage::setMessage(const QString &msg)
 */
 void IntroductionPage::onProgressChanged(int progress)
 {
-    m_progressBar->setRange(0, 100);
     m_progressBar->setValue(progress);
+}
+
+/*!
+    Sets total \a progress value to progress bar.
+*/
+void IntroductionPage::setTotalProgress(int totalProgress)
+{
+    if (m_progressBar)
+        m_progressBar->setRange(0, totalProgress);
 }
 
 /*!
@@ -1617,7 +1623,7 @@ void IntroductionPage::entering()
     showWidgets(false);
     setMessage(QString());
     setErrorMessage(QString());
-    setButtonText(QWizard::CancelButton, tr("Quit"));
+    setButtonText(QWizard::CancelButton, tr("&Quit"));
 
     m_progressBar->setValue(0);
     m_progressBar->setRange(0, 0);
@@ -1843,215 +1849,6 @@ void LicenseAgreementPage::updateUi()
 
 }
 
-
-// -- ComponentSelectionPage::Private
-
-class ComponentSelectionPage::Private : public QObject
-{
-    Q_OBJECT
-
-public:
-    Private(ComponentSelectionPage *qq, PackageManagerCore *core)
-        : q(qq)
-        , m_core(core)
-        , m_treeView(new QTreeView(q))
-        , m_allModel(m_core->defaultComponentModel())
-        , m_updaterModel(m_core->updaterComponentModel())
-        , m_currentModel(m_allModel)
-    {
-        m_treeView->setObjectName(QLatin1String("ComponentsTreeView"));
-
-        connect(m_allModel, SIGNAL(checkStateChanged(QInstaller::ComponentModel::ModelState)), this,
-            SLOT(onModelStateChanged(QInstaller::ComponentModel::ModelState)));
-        connect(m_updaterModel, SIGNAL(checkStateChanged(QInstaller::ComponentModel::ModelState)),
-            this, SLOT(onModelStateChanged(QInstaller::ComponentModel::ModelState)));
-
-        QHBoxLayout *hlayout = new QHBoxLayout;
-        hlayout->addWidget(m_treeView, 3);
-
-        m_descriptionLabel = new QLabel(q);
-        m_descriptionLabel->setWordWrap(true);
-        m_descriptionLabel->setObjectName(QLatin1String("ComponentDescriptionLabel"));
-
-        QVBoxLayout *vlayout = new QVBoxLayout;
-        vlayout->addWidget(m_descriptionLabel);
-
-        m_sizeLabel = new QLabel(q);
-        m_sizeLabel->setWordWrap(true);
-        vlayout->addWidget(m_sizeLabel);
-        m_sizeLabel->setObjectName(QLatin1String("ComponentSizeLabel"));
-
-        vlayout->addSpacerItem(new QSpacerItem(1, 1, QSizePolicy::MinimumExpanding,
-            QSizePolicy::MinimumExpanding));
-        hlayout->addLayout(vlayout, 2);
-
-        QVBoxLayout *layout = new QVBoxLayout(q);
-        layout->addLayout(hlayout, 1);
-
-        m_checkDefault = new QPushButton;
-        connect(m_checkDefault, &QAbstractButton::clicked,
-                this, &ComponentSelectionPage::Private::selectDefault);
-        if (m_core->isInstaller()) {
-            m_checkDefault->setObjectName(QLatin1String("SelectDefaultComponentsButton"));
-            m_checkDefault->setShortcut(QKeySequence(ComponentSelectionPage::tr("Alt+A",
-                "select default components")));
-            m_checkDefault->setText(ComponentSelectionPage::tr("Def&ault"));
-        } else {
-            m_checkDefault->setEnabled(false);
-            m_checkDefault->setObjectName(QLatin1String("ResetComponentsButton"));
-            m_checkDefault->setShortcut(QKeySequence(ComponentSelectionPage::tr("Alt+R",
-                "reset to already installed components")));
-            m_checkDefault->setText(ComponentSelectionPage::tr("&Reset"));
-        }
-        hlayout = new QHBoxLayout;
-        hlayout->addWidget(m_checkDefault);
-
-        m_checkAll = new QPushButton;
-        hlayout->addWidget(m_checkAll);
-        connect(m_checkAll, &QAbstractButton::clicked,
-                this, &ComponentSelectionPage::Private::selectAll);
-        m_checkAll->setObjectName(QLatin1String("SelectAllComponentsButton"));
-        m_checkAll->setShortcut(QKeySequence(ComponentSelectionPage::tr("Alt+S",
-            "select all components")));
-        m_checkAll->setText(ComponentSelectionPage::tr("&Select All"));
-
-        m_uncheckAll = new QPushButton;
-        hlayout->addWidget(m_uncheckAll);
-        connect(m_uncheckAll, &QAbstractButton::clicked,
-                this, &ComponentSelectionPage::Private::deselectAll);
-        m_uncheckAll->setObjectName(QLatin1String("DeselectAllComponentsButton"));
-        m_uncheckAll->setShortcut(QKeySequence(ComponentSelectionPage::tr("Alt+D",
-            "deselect all components")));
-        m_uncheckAll->setText(ComponentSelectionPage::tr("&Deselect All"));
-
-        hlayout->addSpacerItem(new QSpacerItem(1, 1, QSizePolicy::MinimumExpanding,
-            QSizePolicy::MinimumExpanding));
-        layout->addLayout(hlayout);
-    }
-
-    void updateTreeView()
-    {
-        m_checkDefault->setVisible(m_core->isInstaller() || m_core->isPackageManager());
-        if (m_treeView->selectionModel()) {
-            disconnect(m_treeView->selectionModel(), &QItemSelectionModel::currentChanged,
-                this, &ComponentSelectionPage::Private::currentSelectedChanged);
-        }
-
-        m_currentModel = m_core->isUpdater() ? m_updaterModel : m_allModel;
-        m_treeView->setModel(m_currentModel);
-        m_treeView->setExpanded(m_currentModel->index(0, 0), true);
-
-        const bool installActionColumnVisible = m_core->settings().installActionColumnVisible();
-        if (!installActionColumnVisible)
-            m_treeView->hideColumn(ComponentModelHelper::ActionColumn);
-
-        if (m_core->isInstaller()) {
-            m_treeView->setHeaderHidden(true);
-            for (int i = ComponentModelHelper::InstalledVersionColumn; i < m_currentModel->columnCount(); ++i)
-                m_treeView->hideColumn(i);
-
-            if (installActionColumnVisible) {
-                m_treeView->header()->setStretchLastSection(false);
-                m_treeView->header()->setSectionResizeMode(
-                            ComponentModelHelper::NameColumn, QHeaderView::Stretch);
-                m_treeView->header()->setSectionResizeMode(
-                            ComponentModelHelper::ActionColumn, QHeaderView::ResizeToContents);
-            }
-        } else {
-            m_treeView->header()->setStretchLastSection(true);
-            if (installActionColumnVisible) {
-                m_treeView->header()->setSectionResizeMode(
-                            ComponentModelHelper::NameColumn, QHeaderView::Interactive);
-                m_treeView->header()->setSectionResizeMode(
-                            ComponentModelHelper::ActionColumn, QHeaderView::Interactive);
-            }
-            for (int i = 0; i < m_currentModel->columnCount(); ++i)
-                m_treeView->resizeColumnToContents(i);
-        }
-
-        bool hasChildren = false;
-        const int rowCount = m_currentModel->rowCount();
-        for (int row = 0; row < rowCount && !hasChildren; ++row)
-            hasChildren = m_currentModel->hasChildren(m_currentModel->index(row, 0));
-        m_treeView->setRootIsDecorated(hasChildren);
-
-        connect(m_treeView->selectionModel(), &QItemSelectionModel::currentChanged,
-            this, &ComponentSelectionPage::Private::currentSelectedChanged);
-
-        m_treeView->setCurrentIndex(m_currentModel->index(0, 0));
-    }
-
-public slots:
-    void currentSelectedChanged(const QModelIndex &current)
-    {
-        if (!current.isValid())
-            return;
-
-        m_sizeLabel->setText(QString());
-        m_descriptionLabel->setText(m_currentModel->data(m_currentModel->index(current.row(),
-            ComponentModelHelper::NameColumn, current.parent()), Qt::ToolTipRole).toString());
-
-        Component *component = m_currentModel->componentFromIndex(current);
-        if ((m_core->isUninstaller()) || (!component))
-            return;
-
-        if (component->isSelected() && (component->value(scUncompressedSizeSum).toLongLong() > 0)) {
-            m_sizeLabel->setText(ComponentSelectionPage::tr("This component "
-                "will occupy approximately %1 on your hard disk drive.")
-                .arg(humanReadableSize(component->value(scUncompressedSizeSum).toLongLong())));
-        }
-    }
-
-    void selectAll()
-    {
-        m_currentModel->setCheckedState(ComponentModel::AllChecked);
-    }
-
-    void deselectAll()
-    {
-        m_currentModel->setCheckedState(ComponentModel::AllUnchecked);
-    }
-
-    void selectDefault()
-    {
-        m_currentModel->setCheckedState(ComponentModel::DefaultChecked);
-    }
-
-    void onModelStateChanged(QInstaller::ComponentModel::ModelState state)
-    {
-        q->setModified(state.testFlag(ComponentModel::DefaultChecked) == false);
-        // If all components in the checked list are only checkable when run without forced
-        // installation, set ComponentModel::AllUnchecked as well, as we cannot uncheck anything.
-        // Helps to keep the UI correct.
-        if ((!m_core->noForceInstallation())
-            && (m_currentModel->checked() == m_currentModel->uncheckable())) {
-                state |= ComponentModel::AllUnchecked;
-        }
-        // enable the button if the corresponding flag is not set
-        m_checkAll->setEnabled(state.testFlag(ComponentModel::AllChecked) == false);
-        m_uncheckAll->setEnabled(state.testFlag(ComponentModel::AllUnchecked) == false);
-        m_checkDefault->setEnabled(state.testFlag(ComponentModel::DefaultChecked) == false);
-
-        // update the current selected node (important to reflect possible sub-node changes)
-        if (m_treeView->selectionModel())
-            currentSelectedChanged(m_treeView->selectionModel()->currentIndex());
-    }
-
-public:
-    ComponentSelectionPage *q;
-    PackageManagerCore *m_core;
-    QTreeView *m_treeView;
-    ComponentModel *m_allModel;
-    ComponentModel *m_updaterModel;
-    ComponentModel *m_currentModel;
-    QLabel *m_sizeLabel;
-    QLabel *m_descriptionLabel;
-    QPushButton *m_checkAll;
-    QPushButton *m_uncheckAll;
-    QPushButton *m_checkDefault;
-};
-
-
 // -- ComponentSelectionPage
 
 /*!
@@ -2066,7 +1863,7 @@ public:
 */
 ComponentSelectionPage::ComponentSelectionPage(PackageManagerCore *core)
     : PackageManagerPage(core)
-    , d(new Private(this, core))
+    , d(new ComponentSelectionPagePrivate(this, core))
 {
     setPixmap(QWizard::WatermarkPixmap, QPixmap());
     setObjectName(QLatin1String("ComponentSelectionPage"));
@@ -2092,7 +1889,7 @@ void ComponentSelectionPage::entering()
         QT_TR_NOOP("Please select the components you want to update."),
         QT_TR_NOOP("Please select the components you want to install."),
         QT_TR_NOOP("Please select the components you want to uninstall."),
-        QT_TR_NOOP("Select the components to install. Deselect installed components to uninstall them.")
+        QT_TR_NOOP("Select the components to install. Deselect installed components to uninstall them. Any components already installed will not be updated.")
      };
 
     int index = 0;
@@ -2104,6 +1901,16 @@ void ComponentSelectionPage::entering()
 
     d->updateTreeView();
     setModified(isComplete());
+    if (core->settings().repositoryCategories().count() > 0 && !core->isOfflineOnly()
+        && !core->isUpdater()) {
+        d->setupCategoryLayout();
+    }
+    d->showCompressedRepositoryButton();
+}
+
+void ComponentSelectionPage::leaving()
+{
+    d->hideCompressedRepositoryButton();
 }
 
 /*!
@@ -2165,6 +1972,11 @@ void ComponentSelectionPage::deselectComponent(const QString &id)
     const QModelIndex &idx = d->m_currentModel->indexFromComponentName(id);
     if (idx.isValid())
         d->m_currentModel->setData(idx, Qt::Unchecked, Qt::CheckStateRole);
+}
+
+void ComponentSelectionPage::allowCompressedRepositoryInstall()
+{
+    d->allowCompressedRepositoryInstall();
 }
 
 void ComponentSelectionPage::setModified(bool modified)
@@ -2421,7 +2233,7 @@ QString TargetDirectoryPage::targetDirWarning() const
     }
 
     target = target.canonicalPath();
-    if (target == QDir::root() || target == QDir::home()) {
+    if (!target.isEmpty() && (target == QDir::root() || target == QDir::home())) {
         return tr("As the install directory is completely deleted, installing in %1 is forbidden.")
             .arg(QDir::toNativeSeparators(target.path()));
     }
@@ -2671,7 +2483,7 @@ void ReadyForInstallationPage::entering()
     }
 
     QString htmlOutput;
-    bool componentsOk = calculateComponents(&htmlOutput);
+    bool componentsOk = packageManagerCore()->calculateComponents(&htmlOutput);
     m_taskDetailsBrowser->setHtml(htmlOutput);
     m_taskDetailsBrowser->setVisible(!componentsOk || isVerbose());
     setComplete(componentsOk);
@@ -2768,51 +2580,7 @@ void ReadyForInstallationPage::entering()
             .arg(humanReadableSize(packageManagerCore()->requiredDiskSpace()))));
 }
 
-bool ReadyForInstallationPage::calculateComponents(QString *displayString)
-{
-    QString htmlOutput;
-    QString lastInstallReason;
-    if (!packageManagerCore()->calculateComponentsToUninstall() ||
-            !packageManagerCore()->calculateComponentsToInstall()) {
-        htmlOutput.append(QString::fromLatin1("<h2><font color=\"red\">%1</font></h2><ul>")
-                          .arg(tr("Cannot resolve all dependencies.")));
-        //if we have a missing dependency or a recursion we can display it
-        if (!packageManagerCore()->componentsToInstallError().isEmpty()) {
-            htmlOutput.append(QString::fromLatin1("<li> %1 </li>").arg(
-                                  packageManagerCore()->componentsToInstallError()));
-        }
-        htmlOutput.append(QLatin1String("</ul>"));
-        if (displayString)
-            *displayString = htmlOutput;
-        return false;
-    }
 
-    // In case of updater mode we don't uninstall components.
-    if (!packageManagerCore()->isUpdater()) {
-        QList<Component*> componentsToRemove = packageManagerCore()->componentsToUninstall();
-        if (!componentsToRemove.isEmpty()) {
-            htmlOutput.append(QString::fromLatin1("<h3>%1</h3><ul>").arg(tr("Components about to "
-                "be removed.")));
-            foreach (Component *component, componentsToRemove)
-                htmlOutput.append(QString::fromLatin1("<li> %1 </li>").arg(component->name()));
-            htmlOutput.append(QLatin1String("</ul>"));
-        }
-    }
-
-    foreach (Component *component, packageManagerCore()->orderedComponentsToInstall()) {
-        const QString installReason = packageManagerCore()->installReason(component);
-        if (lastInstallReason != installReason) {
-            if (!lastInstallReason.isEmpty()) // means we had to close the previous list
-                htmlOutput.append(QLatin1String("</ul>"));
-            htmlOutput.append(QString::fromLatin1("<h3>%1</h3><ul>").arg(installReason));
-            lastInstallReason = installReason;
-        }
-        htmlOutput.append(QString::fromLatin1("<li> %1 </li>").arg(component->name()));
-    }
-    if (displayString)
-        *displayString = htmlOutput;
-    return true;
-}
 
 /*!
     Called when end users leave the page and the PackageManagerGui:currentPageChanged()

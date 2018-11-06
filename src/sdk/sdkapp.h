@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -72,26 +67,33 @@ public:
     }
 
     /*!
-        Returns the installer / maintenance tool binary. In case of an installer this will be the
+        Returns the installer binary or installer.dat. In case of an installer this will be the
         installer binary itself, which contains the binary layout and the binary content. In case
-        of an maintenance tool, it will return a binary that has just a binary layout append.
+        of an maintenance tool, it will return a .dat file that has just a binary layout
+        as the binary layout cannot be appended to the actual maintenance tool binary
+        itself because of signing.
 
-        Note on OS X: For compatibility reason this function will return the a .dat file located
-        inside the resource folder in the application bundle, as on OS X the binary layout cannot
-        be appended to the actual installer / maintenance tool binary itself because of signing.
+        On OS X: This function will return always the .dat file
+        .dat file is located inside the resource folder in the application
+        bundle in OS X.
     */
     QString binaryFile() const
     {
         QString binaryFile = QCoreApplication::applicationFilePath();
-#ifdef Q_OS_OSX
-        // The installer binary on OSX does not contain the binary content, it's put into
-        // the resources folder as separate file. Adjust the actual binary path. No error
-        // checking here since we will fail later while reading the binary content.
+
+        // The installer binary on OSX and Windows does not contain the binary
+        // content, it's put into the resources folder as separate file.
+        // Adjust the actual binary path. No error checking here since we
+        // will fail later while reading the binary content.
         QDir resourcePath(QFileInfo(binaryFile).dir());
+
+#ifdef Q_OS_OSX
         resourcePath.cdUp();
         resourcePath.cd(QLatin1String("Resources"));
-        return resourcePath.filePath(QLatin1String("installer.dat"));
 #endif
+        QString datFilePath = resourcePath.filePath(QLatin1String("installer.dat"));
+        if (QFileInfo::exists(datFilePath))
+            return datFilePath;
         return binaryFile;
     }
 
@@ -114,7 +116,11 @@ public:
             QString bundlePath;
             if (QInstaller::isInBundle(fi.absoluteFilePath(), &bundlePath))
                 fi.setFile(bundlePath);
+#ifdef Q_OS_OSX
             return fi.absoluteDir().filePath(fi.baseName() + QLatin1String(".dat"));
+#else
+            return fi.absoluteDir().filePath(qApp->applicationName() + QLatin1String(".dat"));
+#endif
         }
         return QString();
     }

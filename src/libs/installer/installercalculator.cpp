@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -35,6 +30,7 @@
 
 #include "component.h"
 #include "packagemanagercore.h"
+#include "settings.h"
 
 #include <QDebug>
 
@@ -97,9 +93,9 @@ QString InstallerCalculator::componentsToInstallError() const
     return m_componentsToInstallError;
 }
 
-void InstallerCalculator::realAppendToInstallComponents(Component *component)
+void InstallerCalculator::realAppendToInstallComponents(Component *component, const QString &version)
 {
-    if (!component->isInstalled() || component->updateRequested()) {
+    if (!component->isInstalled(version) || component->updateRequested()) {
         m_orderedComponentsToInstall.append(component);
         m_toInstallComponentIds.insert(component->name());
     }
@@ -159,10 +155,10 @@ bool InstallerCalculator::appendComponentsToInstall(const QList<Component *> &co
     return true;
 }
 
-bool InstallerCalculator::appendComponentToInstall(Component *component)
+bool InstallerCalculator::appendComponentToInstall(Component *component, const QString &version)
 {
     QSet<QString> allDependencies = component->dependencies().toSet();
-
+    QString requiredDependencyVersion = version;
     foreach (const QString &dependencyComponentName, allDependencies) {
         // PackageManagerCore::componentByName returns 0 if dependencyComponentName contains a
         // version which is not available
@@ -174,32 +170,59 @@ bool InstallerCalculator::appendComponentToInstall(Component *component)
                 component->name());
             qWarning().noquote() << errorMessage;
             m_componentsToInstallError.append(errorMessage);
-            return false;
+            if (component->packageManagerCore()->settings().allowUnstableComponents()) {
+                component->setUnstable(PackageManagerCore::UnstableError::MissingDependency, errorMessage);
+                continue;
+            } else {
+                return false;
+            }
         }
+        //Check if component requires higher version than what might be already installed
+        bool isUpdateRequired = false;
+        QString requiredName;
+        QString requiredVersion;
+        PackageManagerCore::parseNameAndVersion(dependencyComponentName, &requiredName, &requiredVersion);
+        if (!requiredVersion.isEmpty() &&
+                !dependencyComponent->value(scInstalledVersion).isEmpty()) {
+            QRegExp compEx(QLatin1String("([<=>]+)(.*)"));
+            const QString installedVersion = compEx.exactMatch(dependencyComponent->value(scInstalledVersion)) ?
+                compEx.cap(2) : dependencyComponent->value(scInstalledVersion);
 
-        if ((!dependencyComponent->isInstalled() || dependencyComponent->updateRequested())
-            && !m_toInstallComponentIds.contains(dependencyComponent->name())) {
-                if (m_visitedComponents.value(component).contains(dependencyComponent)) {
-                    const QString errorMessage = recursionError(component);
-                    qWarning().noquote() << errorMessage;
-                    m_componentsToInstallError = errorMessage;
-                    Q_ASSERT_X(!m_visitedComponents.value(component).contains(dependencyComponent),
-                        Q_FUNC_INFO, qPrintable(errorMessage));
-                    return false;
-                }
-                m_visitedComponents[component].insert(dependencyComponent);
+            requiredVersion = compEx.exactMatch(requiredVersion) ? compEx.cap(2) : requiredVersion;
 
-                // add needed dependency components to the next run
-                insertInstallReason(dependencyComponent, InstallerCalculator::Dependent,
-                    component->name());
+            if (KDUpdater::compareVersion(requiredVersion, installedVersion) >= 1 ) {
+                isUpdateRequired = true;
+                requiredDependencyVersion = requiredVersion;
+            }
+        }
+        //Check dependencies only if
+        //- Dependency is not installed or update requested, nor newer version of dependency component required
+        //- And dependency component is not already added for install
+        //- And component is not already added for install, then dependencies are already resolved
+        if (((!dependencyComponent->isInstalled() || dependencyComponent->updateRequested())
+                || isUpdateRequired) && (!m_toInstallComponentIds.contains(dependencyComponent->name())
+                && !m_toInstallComponentIds.contains(component->name()))) {
+            if (m_visitedComponents.value(component).contains(dependencyComponent)) {
+                const QString errorMessage = recursionError(component);
+                qWarning().noquote() << errorMessage;
+                m_componentsToInstallError = errorMessage;
+                Q_ASSERT_X(!m_visitedComponents.value(component).contains(dependencyComponent),
+                    Q_FUNC_INFO, qPrintable(errorMessage));
+                return false;
+            }
+            m_visitedComponents[component].insert(dependencyComponent);
 
-                if (!appendComponentToInstall(dependencyComponent))
-                    return false;
+            // add needed dependency components to the next run
+            insertInstallReason(dependencyComponent, InstallerCalculator::Dependent,
+                component->name());
+
+            if (!appendComponentToInstall(dependencyComponent, requiredDependencyVersion))
+                return false;
         }
     }
 
     if (!m_toInstallComponentIds.contains(component->name())) {
-        realAppendToInstallComponents(component);
+        realAppendToInstallComponents(component, requiredDependencyVersion);
         insertInstallReason(component, InstallerCalculator::Resolved);
     }
     return true;

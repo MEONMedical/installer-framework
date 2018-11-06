@@ -2,6 +2,8 @@ TEMPLATE = lib
 TARGET = installer
 INCLUDEPATH += . ..
 
+CONFIG += staticlib
+
 include(../7zip/7zip.pri)
 include(../kdtools/kdtools.pri)
 include(../../../installerfw.pri)
@@ -129,7 +131,9 @@ HEADERS += packagemanagercore.h \
     lib7z_guid.h \
     lib7z_create.h \
     lib7z_extract.h \
-    lib7z_list.h
+    lib7z_list.h \
+    repositorycategory.h \
+    componentselectionpage_p.h
 
 SOURCES += packagemanagercore.cpp \
     packagemanagercore_p.cpp \
@@ -204,7 +208,9 @@ SOURCES += packagemanagercore.cpp \
     serverauthenticationdialog.cpp \
     keepaliveobject.cpp \
     systeminfo.cpp \
-    packagesource.cpp
+    packagesource.cpp \
+    repositorycategory.cpp \
+    componentselectionpage_p.cpp
 
 FORMS += proxycredentialsdialog.ui \
     serverauthenticationdialog.ui

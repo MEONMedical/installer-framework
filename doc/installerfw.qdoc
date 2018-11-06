@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
@@ -266,6 +266,10 @@
                 elements that each contain the \c <Url> child element that specifies the URL to
                 access the repository. For more information,  see \l{Configuring Repositories}.
         \row
+            \li RepositoryCategories
+            \li Name of a category that can contain a list of \c <RemoteRepositories> child elements.
+                For more information,  see \l{Configuring Repository Categories}.
+        \row
             \li MaintenanceToolName
             \li Filename of the generated maintenance tool. Defaults to
                 \e maintenancetool. The platform-specific executable file extension is
@@ -324,6 +328,11 @@
         \row
             \li SupportsModify
             \li Set to \c false if the product does not support modifying an existing installation.
+         \row
+            \li SaveDefaultRepositories
+            \li Set to \c false if default repositories \c <RemoteRepositories> should not be saved to \e {MaintenanceToolName}.ini.
+                By default default repositories are saved. Not saving the repositories means than when you run  \e maintenancetool
+                there are no default repositories in use.
 
     \endtable
 
@@ -691,8 +700,10 @@
             \li Checkable
             \li Set to \c false if you want to hide the checkbox for an item. This is useful
                 when only a few subcomponents should be selected instead of all. Optional.
-                \note The content from the data directory is not installed if \c Checkable
-                is \c false unless \c ForcedInstallation is set to \c true.
+        \row
+            \li ExpandedByDefault
+            \li Set to \c true if you want this item to be expanded by default. Optional.
+
     \endtable
 
     \section2 Component Dependencies
@@ -756,7 +767,7 @@
 
     You can also create hybrid installers that store some components locally
     and receive others via a network connection. For more information, see
-    ###TODO insert link here.
+    \l {Reducing Installer Size}.
 
     For information about how to implement data integration into the
     installer binary, see QInstaller::BinaryContent.
@@ -823,6 +834,11 @@
                 {package directory}.
                 Defaults to the current working directory.
         \row
+            \li --repository directory
+            \li Use \c directory as the repository directory
+                with packages to repack.
+                This entry can be given multiple times.
+        \row
             \li -n or --online-only
             \li Compile without any component in the installer binary.
         \row
@@ -854,6 +870,10 @@
             \li Ignore component or package directories that do not have valid
                 metadata information (package.xml) to make testing faster.
         \row
+            \li --ignore-invalid-repositories
+            \li Ignore repository directories that do not have valid
+                metadata information (Updates.xml) instead of aborting.
+        \row
             \li -v or --verbose
             \li Display debug output.
 
@@ -869,6 +889,11 @@
     \note The listed packages are included in the installer, as well as all
     their dependencies and all packages that share the same prefix, unless you
     specify the \c --nodeps parameter.
+
+    In the optional resource files specified via the \c --resources parameter, a
+    special \c fonts/ path can be used to ship custom fonts. These fonts will
+    be loaded automatically and thus become available in a stylesheet which can
+    be specified via the \c StyleSheet variable.
 
     On Windows, the name of the target binary is automatically extended with
     .exe, if you do not specify the extension. On Mac, the target is
@@ -902,6 +927,9 @@
     specify the location in the installer configuration file when creating an
     installer for it.
 
+    You can use an existing repository to repack packages to another
+    repository or offline installer.
+
     \section2 Summary of repogen Parameters
 
     \table
@@ -912,6 +940,12 @@
             \li -p or --packages directory
             \li Use \c directory as the \l{Package Directory Structure}
                 {package directory}. This is mandatory.
+        \row
+            \li --repository directory
+            \li Use \c directory as the repository directory
+                with packages to repack (not to confuse with the mandatory target
+                repository directory).
+                This entry can be given multiple times.
         \row
             \li repository directory
             \li Target directory for the repository. During an initial installation, the directory
@@ -930,8 +964,8 @@
             \li Update all packages in the packages directory. The list can be further
                 filtered with the \c {-i}, \c {-e} parameters.
         \row
-            \li --update-new-packages
-            \li Update only packages that are new or have a newer version. The
+            \li --update-new-components
+            \li Update only components that are new or have a newer version. The
                 list can be further filtered with the \c {-i}, \c{-e}
                 parameters.
         \row
@@ -1084,6 +1118,36 @@
     text. Authentication details not set here will be gotten at runtime using a dialog.
     The user can work around these settings at runtime.
 
+    \section1 Configuring Repository Categories
+
+    The \c <RepositoryCategory> element in the installer configuration file
+    (config.xml) can contain a list of several \c <RemoteRepositories> elements. Each \c <RemoteRepositories>
+    element within the \c <RepositoryCagetory> element is considered a category, which has a \c <DisplayName> and can
+    contain several \c <Repository> elements. Repository categories are shown in the component selection page,
+    on the left side of the component selection widget:
+
+    \image ifw-repository-categories.png "Component selection Page"
+
+    By default, only repositories with no category are shown in the component selection widget. Checking one or
+    several repositories and pressing \uicontrol Fetch will update the widget to show content also
+    from the selected categorized repositories.
+
+    Example of creating a repository category:
+
+    \code
+    <RepositoryCategories>
+        <RemoteRepositories>
+             <Displayname>Category 1</Displayname>
+             <Repository>
+                     <Url>http://www.example.com/packages</Url>
+                     <Enabled>1</Enabled>
+                     <Username>user</Username>
+                     <Password>password</Password>
+                     <DisplayName>Example repository</DisplayName>
+             </Repository>
+        </RemoteRepositories>
+    </RepositoryCategories>
+    \endcode
 
     \section1 Creating Installer Binaries
 
@@ -1259,8 +1323,8 @@
                  displayname="Example Repository" />
     \endcode
 
-    \c{url} will be used as a base url to resolve an \c{Updates.xml} file against.
-    If \c{url} is itself relative, it will be resolved against the base url of the current document.
+    \c{url} will be used as a base URL to resolve an \c{Updates.xml} file against.
+    If \c{url} is itself relative, it will be resolved against the base URL of the current document.
 
     \c{displayname} specifies how the repository should be named in the \gui Settings page
     of the Maintenance Tool.
@@ -1275,7 +1339,7 @@
     <Repository action="remove" url="http://www.example.com/repository" />
     \endcode
 
-    \c{url} must match exactly the url that is to be removed.
+    \c{url} must match exactly the URL that is to be removed.
 
     \section2 Replacing Repositories
     To replace one repository with another, add a \c <Repository> child element to the
@@ -1287,32 +1351,34 @@
                 displayname="New Example Repository" />
     \endcode
 
-    \c{oldUrl} must match exactly the url that is to be replaced.
+    \c{oldUrl} must match exactly the URL that is to be replaced.
 
-    \c{newUrl} must match exactly the url that is replace to.
+    \c{newUrl} must match exactly the URL that it is replaced with.
 
     \section1 Relocatable Repositories
 
-    Some projects contain multiple repositories. To create relocatable set
+    Some projects contain multiple repositories. To create a relocatable set
     of repositories you should use relative paths.
 
-    So if generic repository available at address \c{http://www.example.com/repositories/generic}
-    and \c{Updates.xml} contains \c <Repository> element with the following options:
+    So if the generic repository available at the address
+    \c{http://www.example.com/repositories/generic} and \c{Updates.xml}
+    contains \c <Repository> element with the following options:
 
     \code
     <Repository action="add" url="../module" name="user" password="password"
                  displayname="Module Repository" />
     \endcode
 
-    Resolved address of added repository will be \c{http://www.example.com/repositories/module}.
-    So that the repository does not contain information about their absolute location.
+    Then the resolved address of the added repository will be
+    \c{http://www.example.com/repositories/module}, so that the repository does
+    not contain information about their absolute location.
 
     If you want to change the address, you can simply copy a set of repositories as is.
-    It recommended for some time to maintain the old generic repository and replace addresses
+    It is recommended to maintain the old generic repository for some time and replace the addresses
     as described above. You can also provide the updated installer with the new generic address.
 
-    You can use relative path for arguments \c url, \c oldUrl and \c newUrl at
-    \c <Repository> element.
+    You can use relative paths for the arguments \c url, \c oldUrl, and \c newUrl in
+    the \c <Repository> element.
 */
 
 /*!

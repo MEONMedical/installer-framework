@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -100,6 +95,7 @@ int main(int argc, char** argv)
         QStringList filteredPackages;
         bool updateExistingRepository = false;
         QStringList packagesDirectories;
+        QStringList repositoryDirectories;
         QInstallerTools::FilterType filterType = QInstallerTools::Exclude;
         bool remove = false;
         bool updateExistingRepositoryWithNewComponents = false;
@@ -129,8 +125,8 @@ int main(int argc, char** argv)
                 args.removeFirst();
                 if (!filteredPackages.isEmpty()) {
                     return printErrorAndUsageAndExit(QCoreApplication::translate("QInstaller",
-                        "Error: --include and --exclude are mutual exclusive options. Use either "
-                        "one or the other."));
+                        "Error: --include and --exclude are mutually exclusive. Use either one or "
+                        "the other."));
                 }
 
                 if (args.isEmpty() || args.first().startsWith(QLatin1Char('-'))) {
@@ -161,6 +157,19 @@ int main(int argc, char** argv)
 
                 packagesDirectories.append(args.first());
                 args.removeFirst();
+            } else if (args.first() == QLatin1String("--repository")) {
+                args.removeFirst();
+                if (args.isEmpty()) {
+                    return printErrorAndUsageAndExit(QCoreApplication::translate("QInstaller",
+                        "Error: Repository parameter missing argument"));
+                }
+
+                if (!QFileInfo(args.first()).exists()) {
+                    return printErrorAndUsageAndExit(QCoreApplication::translate("QInstaller",
+                        "Error: Only local filesystem repositories now supported"));
+                }
+                repositoryDirectories.append(args.first());
+                args.removeFirst();
             } else if (args.first() == QLatin1String("--ignore-translations")
                 || args.first() == QLatin1String("--ignore-invalid-packages")) {
                     args.removeFirst();
@@ -173,7 +182,7 @@ int main(int argc, char** argv)
             }
         }
 
-        if (packagesDirectories.isEmpty() || (args.count() != 1)) {
+        if ((packagesDirectories.isEmpty() && repositoryDirectories.isEmpty()) || (args.count() != 1)) {
                 printUsage();
                 return 1;
         }
@@ -195,8 +204,15 @@ int main(int argc, char** argv)
                 "Repository target directory \"%1\" already exists.").arg(QDir::toNativeSeparators(repositoryDir)));
         }
 
-        QInstallerTools::PackageInfoVector packages = QInstallerTools::createListOfPackages(packagesDirectories,
+        QInstallerTools::PackageInfoVector packages;
+
+        QInstallerTools::PackageInfoVector precompressedPackages = QInstallerTools::createListOfRepositoryPackages(repositoryDirectories,
             &filteredPackages, filterType);
+        packages.append(precompressedPackages);
+
+        QInstallerTools::PackageInfoVector preparedPackages = QInstallerTools::createListOfPackages(packagesDirectories,
+            &filteredPackages, filterType);
+        packages.append(preparedPackages);
 
         if (updateExistingRepositoryWithNewComponents) {
             QDomDocument doc;
@@ -256,7 +272,10 @@ int main(int argc, char** argv)
         QTemporaryDir tmp;
         tmp.setAutoRemove(false);
         tmpMetaDir = tmp.path();
-        QInstallerTools::copyComponentData(packagesDirectories, repositoryDir, &packages);
+        QStringList directories;
+        directories.append(packagesDirectories);
+        directories.append(repositoryDirectories);
+        QInstallerTools::copyComponentData(directories, repositoryDir, &packages);
         QInstallerTools::copyMetaData(tmpMetaDir, repositoryDir, packages, QLatin1String("{AnyApplication}"),
             QLatin1String(QUOTE(IFW_REPOSITORY_FORMAT_VERSION)));
         QInstallerTools::compressMetaDirectories(tmpMetaDir, tmpMetaDir, pathToVersionMapping);

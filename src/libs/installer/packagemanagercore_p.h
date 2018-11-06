@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2017 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -175,7 +170,9 @@ signals:
 
 public:
     UpdateFinder *m_updateFinder;
+    UpdateFinder *m_compressedFinder;
     QSet<PackageSource> m_packageSources;
+    QSet<PackageSource> m_compressedPackageSources;
     std::shared_ptr<LocalPackageHub> m_localPackageHub;
     QStringList m_filesForDelayedDeletion;
 
@@ -212,6 +209,10 @@ private slots:
         emit m_core->metaJobProgress(progress);
     }
 
+    void totalProgress(quint64 total) {
+        emit m_core->metaJobTotalProgress(total);
+    }
+
     void handleMethodInvocationRequest(const QString &invokableMethodName);
 
 private:
@@ -227,16 +228,21 @@ private:
         bool adminRightsGained, bool deleteOperation);
 
     PackagesList remotePackages();
+    PackagesList compressedPackages();
     LocalPackagesHash localInstalledPackages();
     bool fetchMetaInformationFromRepositories();
-    bool addUpdateResourcesFromRepositories(bool parseChecksum);
+    bool fetchMetaInformationFromCompressedRepositories();
+    bool addUpdateResourcesFromRepositories(bool parseChecksum, bool compressedRepository = false);
     void processFilesForDelayedDeletion();
+    void findExecutablesRecursive(const QString &path, const QStringList &excludeFiles, QStringList *result);
+    QStringList runningInstallerProcesses(const QStringList &exludeFiles);
 
 private:
     PackageManagerCore *m_core;
     MetadataJob m_metadataJob;
 
     bool m_updates;
+    bool m_compressedUpdates;
     bool m_repoFetched;
     bool m_updateSourcesAdded;
     qint64 m_magicBinaryMarker;

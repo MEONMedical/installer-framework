@@ -1,31 +1,26 @@
 /**************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2018 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -57,6 +52,9 @@ CommandLineParser::CommandLineParser()
 
     m_parser.addOption(QCommandLineOption(QLatin1String(CommandLineOptions::Proxy),
         QLatin1String("Use system proxy on Windows and Linux. This option has no effect on OS X.")));
+
+    m_parser.addOption(QCommandLineOption(QLatin1String(CommandLineOptions::NoProxy),
+        QLatin1String("Do not use system proxy.")));
 
     m_parser.addOption(QCommandLineOption(QLatin1String(CommandLineOptions::Script),
         QLatin1String("Execute the script given as argument."), QLatin1String("file")));
@@ -114,7 +112,20 @@ CommandLineParser::CommandLineParser()
         "a value is omitted, the client will use a default instead. Note: The server process is "
         "not started by the client application in that case, you need to start it on your own."),
         QLatin1String("socketname,key")));
-
+    m_parser.addOption(QCommandLineOption(QLatin1String(CommandLineOptions::InstallCompressedRepository),
+        QLatin1String("Installs QBSP or 7z file. The QBSP (Board Support Package) file must be a .7z "
+        "file which contains a valid repository."),
+        QLatin1String("URI,...")));
+    m_parser.addOption(QCommandLineOption(QLatin1String(CommandLineOptions::SilentUpdate),
+        QLatin1String("Updates all packages silently.")));
+    m_parser.addOption(QCommandLineOption(QLatin1String(CommandLineOptions::Platform),
+        QLatin1String("Use the specified platform plugin."), QLatin1String("plugin")));
     m_parser.addPositionalArgument(QLatin1String(CommandLineOptions::KeyValue),
         QLatin1String("Key Value pair to be set."));
+    m_parser.addOption(QCommandLineOption(QLatin1String(CommandLineOptions::SquishPort),
+        QLatin1String("Give a port where Squish can connect to. If no port is given, default "
+        "port 11233 is used. Note: To enable Squish support you first need to build IFW with "
+        "SQUISH_PATH parameter where SQUISH_PATH is pointing to your Squish installation folder: "
+        "<path_to_qt>/bin/qmake -r SQUISH_PATH=<pat_to_squish>"),
+        QLatin1String("port number")));
 }

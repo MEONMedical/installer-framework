@@ -1,32 +1,27 @@
 /****************************************************************************
 **
 ** Copyright (C) 2013 Klaralvdalens Datakonsult AB (KDAB)
-** Copyright (C) 2015 The Qt Company Ltd.
+** Copyright (C) 2017 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
 ** This file is part of the Qt Installer Framework.
 **
-** $QT_BEGIN_LICENSE:LGPL21$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 2.1 or version 3 as published by the Free
-** Software Foundation and appearing in the file LICENSE.LGPLv21 and
-** LICENSE.LGPLv3 included in the packaging of this file. Please review the
-** following information to ensure the GNU Lesser General Public License
-** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
-**
-** As a special exception, The Qt Company gives you certain additional
-** rights. These rights are described in The Qt Company LGPL Exception
-** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
+** GNU General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -44,6 +39,7 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QRegExp>
 
 using namespace KDUpdater;
 using namespace QInstaller;
@@ -173,7 +169,8 @@ void UpdateFinder::Private::computeUpdates()
     // 1. Downloading Update XML files from all the update sources
     // 2. Matching updates with Package XML and figuring out available updates
 
-    clear();
+    if (!q->isCompressedPackage())
+        clear();
     cancel = false;
 
     // First do some quick sanity checks on the packages info
@@ -399,7 +396,8 @@ void UpdateFinder::Private::createUpdateObjects(const PackageSource &source,
             delete updates.take(name);
 
         // Create and register the update
-        updates.insert(name, new Update(source, info));
+        if (!q->isCompressedPackage() || value == Resolution::AddPackage)
+            updates.insert(name, new Update(source, info));
     }
 }
 
@@ -439,6 +437,10 @@ UpdateFinder::Private::Resolution UpdateFinder::Private::checkPriorityAndVersion
                                << ", Source: " << QFileInfo(source.url.toLocalFile()).fileName() << "'";
             return Resolution::RemoveExisting;
         }
+        if (q->isCompressedPackage() && match == 0 && source.priority == existingPackage->packageSource().priority) {
+            //Same package with the same priority and version already exists
+            return Resolution::RemoveExisting;
+        }
         return Resolution::KeepExisting; // otherwise keep existing
     }
     return Resolution::AddPackage;
@@ -453,6 +455,7 @@ UpdateFinder::Private::Resolution UpdateFinder::Private::checkPriorityAndVersion
 */
 UpdateFinder::UpdateFinder()
     : Task(QLatin1String("UpdateFinder"), Stoppable),
+      m_compressedPackage(false),
       d(new Private(this))
 {
 }
@@ -587,34 +590,62 @@ int KDUpdater::compareVersion(const QString &v1, const QString &v2)
     if (v1 == v2)
         return 0;
 
-    // Split version numbers across "."
-    const QStringList v1_comps = v1.split(QRegExp(QLatin1String( "\\.|-")));
-    const QStringList v2_comps = v2.split(QRegExp(QLatin1String( "\\.|-")));
+    // Split version components across ".", "-" or "_"
+    QStringList v1_comps = v1.split(QRegExp(QLatin1String( "\\.|-|_")));
+    QStringList v2_comps = v2.split(QRegExp(QLatin1String( "\\.|-|_")));
 
     // Check each component of the version
     int index = 0;
     while (true) {
-        if (index == v1_comps.count() && index < v2_comps.count())
-            return -1;
-        if (index < v1_comps.count() && index == v2_comps.count())
-            return +1;
+        bool v1_ok = false;
+        bool v2_ok = false;
+
+        if (index == v1_comps.count() && index < v2_comps.count()) {
+            v2_comps.at(index).toInt(&v2_ok);
+            return v2_ok ? -1 : +1;
+        }
+        if (index < v1_comps.count() && index == v2_comps.count()) {
+            v1_comps.at(index).toInt(&v1_ok);
+            return v1_ok ? +1 : -1;
+        }
         if (index >= v1_comps.count() || index >= v2_comps.count())
             break;
 
-        bool v1_ok, v2_ok;
-        int v1_comp = v1_comps[index].toInt(&v1_ok);
-        int v2_comp = v2_comps[index].toInt(&v2_ok);
+        int v1_comp = v1_comps.at(index).toInt(&v1_ok);
+        int v2_comp = v2_comps.at(index).toInt(&v2_ok);
 
         if (!v1_ok) {
-            if (v1_comps[index] == QLatin1String("x"))
+            if (v1_comps.at(index) == QLatin1String("x"))
                 return 0;
         }
         if (!v2_ok) {
-            if (v2_comps[index] == QLatin1String("x"))
+            if (v2_comps.at(index) == QLatin1String("x"))
                 return 0;
         }
-        if (!v1_ok && !v2_ok)
-            return v1_comps[index].compare(v2_comps[index]);
+        if (!v1_ok && !v2_ok) {
+            // try remove equal start
+            int i = 0;
+            while (i < v1_comps.at(index).size()
+                && i < v2_comps.at(index).size()
+                && v1_comps.at(index).at(i) == v2_comps.at(index).at(i)) {
+                ++i;
+            }
+            if (i > 0) {
+                v1_comps[index] = v1_comps.at(index).mid(i);
+                v2_comps[index] = v2_comps.at(index).mid(i);
+                // compare again
+                continue;
+            }
+        }
+        if (!v1_ok || !v2_ok) {
+            int res = v1_comps.at(index).compare(v2_comps.at(index));
+            if (res == 0) {
+                // v1_comps.at(index) == v2_comps(index)
+                ++index;
+                continue;
+            }
+            return res > 0 ? +1 : -1;
+        }
 
         if (v1_comp < v2_comp)
             return -1;
